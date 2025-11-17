@@ -1,14 +1,3 @@
-import os
-import base64
-from flask import Flask, render_template_string, request
-from openai import OpenAI
-
-app = Flask(__name__)
-
-# Get API key from environment
-API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=API_KEY) if API_KEY else None
-
 HTML_TEMPLATE = """
 <!doctype html>
 <html>
@@ -56,8 +45,14 @@ HTML_TEMPLATE = """
         letter-spacing: -0.02em;
       }
       .tagline {
+        margin: 0 0 4px;
+        font-size: 0.98rem;
+        color: #111827;
+        font-weight: 500;
+      }
+      .subline {
         margin: 0 0 18px;
-        font-size: 0.94rem;
+        font-size: 0.9rem;
         color: #4b5563;
       }
       .step-label {
@@ -94,16 +89,16 @@ HTML_TEMPLATE = """
         background: #f9fafb;
         transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
       }
+      textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
       select:focus,
       textarea:focus,
       input[type="file"]:focus {
         border-color: #6366f1;
         box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
         background: #ffffff;
-      }
-      textarea {
-        min-height: 90px;
-        resize: vertical;
       }
       .error {
         margin-bottom: 12px;
@@ -172,13 +167,19 @@ HTML_TEMPLATE = """
         font-size: 0.92rem;
         color: #111827;
       }
+      .result strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.94rem;
+      }
     </style>
   </head>
   <body>
     <div class="page">
       <div class="card">
         <h1>Message Intent Lab</h1>
-        <p class="tagline">Drop in a convo, get a plain-English read on what the other person was probably trying to do.</p>
+        <p class="tagline">Trying to figure out if he is ghosting or just bad at texting? I will decode it.</p>
+        <p class="subline">When someone texts weird and your brain will not shut up about it. Upload screenshots and get a plain English read on what he was probably trying to do.</p>
 
         {% if error %}
           <div class="error"><strong>Whoops.</strong> {{ error }}</div>
@@ -187,53 +188,45 @@ HTML_TEMPLATE = """
         <form method="POST" enctype="multipart/form-data">
           <!-- STEP 1 -->
           <div class="field">
-            <div class="step-label">Step 1 · You</div>
-            <div class="field-title">Who are you in the conversation?</div>
-            <select name="who" id="who" required>
-              <option value="">Tap to choose…</option>
-              <option {% if who == "Person A / first speaker" %}selected{% endif %}>Person A / first speaker</option>
-              <option {% if who == "Person B / second speaker" %}selected{% endif %}>Person B / second speaker</option>
-              <option {% if who == "Blue bubbles" %}selected{% endif %}>Blue bubbles</option>
-              <option {% if who == "Gray bubbles" %}selected{% endif %}>Gray bubbles</option>
-            </select>
-            <p class="hint">If this is iMessage, “blue bubbles” = you, “gray bubbles” = them.</p>
+            <div class="step-label">Step 1</div>
+            <div class="field-title">What is the situation?</div>
+            <textarea
+              name="context"
+              id="context"
+              placeholder="Example: We have been talking for a month and he suddenly pulled back after last weekend.">{{ context or "" }}</textarea>
+            <p class="hint">Totally optional. It just helps the interpretation feel more accurate.</p>
           </div>
 
-          <!-- STEP 2 -->
+          <!-- STEP 2: screenshots -->
           <div class="field">
-            <div class="step-label">Step 2 · What’s going on?</div>
-            <div class="field-title">Give 1–2 sentences of context (optional)</div>
-            <textarea name="context" id="context" placeholder="Example: We’ve been talking for a month and things suddenly got weird.">{{ context or "" }}</textarea>
-          </div>
-
-          <!-- STEP 3A: screenshots -->
-          <div class="field">
-            <div class="step-label">Step 3 · Add the conversation</div>
-            <div class="field-title">Easiest: upload screenshots</div>
+            <div class="step-label">Step 2</div>
+            <div class="field-title">Add the conversation</div>
             <input type="file" name="images" id="images" accept="image/*" multiple>
-            <p class="hint">Upload 1–3 screenshots of the chat, earliest message first. I’ll read the bubbles for you.</p>
+            <p class="hint">Best option is 1 to 3 screenshots of the chat from your phone, earliest messages first. Assume you are the blue bubble.</p>
           </div>
 
           <div class="or-divider">
             <span></span> or paste the messages <span></span>
           </div>
 
-          <!-- STEP 3B: text -->
+          <!-- STEP 2B: text -->
           <div class="field">
-            <div class="field-title">Or paste the text instead</div>
-            <textarea name="thread" id="thread" placeholder="Copy the convo and paste it here, starting from the first message.">{{ thread or "" }}</textarea>
+            <div class="field-title">Or paste the messages instead</div>
+            <textarea
+              name="thread"
+              id="thread"
+              placeholder="Copy the chat and paste it here, starting from the first message.">{{ thread or "" }}</textarea>
           </div>
 
           <div class="button-row">
-            <button type="submit">Analyze intentions</button>
-            <div class="button-caption">I’ll send back a short, non-judgy breakdown of what they were likely doing.</div>
+            <button type="submit">Decode the vibe</button>
+            <div class="button-caption">You get a short breakdown of what his messages likely meant, without the overthinking spiral.</div>
           </div>
         </form>
 
         {% if result %}
           <div class="result">
-            <strong>Intent Snapshot</strong>
-            <br><br>
+            <strong>Here is what this probably means</strong>
             {{ result }}
           </div>
         {% endif %}
@@ -242,142 +235,3 @@ HTML_TEMPLATE = """
   </body>
 </html>
 """
-
-
-SYSTEM_PROMPT = """
-You are a behavioral scientist specializing in interpersonal communication, attachment patterns, and conflict dynamics.
-
-The user will share a text message conversation and briefly describe who they are in the exchange. Your job is to infer likely intentions and emotional motives of the other person, not to give definitive answers.
-
-Please give your output in exactly four sections, clearly labeled:
-
-1. Surface-Level Summary (2–3 sentences)
-2. Likely Intentions of the Other Person (3–5 bullets)
-3. Emotional / Psychological Patterns You See (1–2 paragraphs)
-4. Ambiguities and Alternative Reads (2–3 bullets)
-
-Do NOT tell the client what to text back. Do NOT give life advice. Focus on helping them see the pattern beneath the words.
-"""
-
-def extract_text_from_images(files):
-    """
-    Given a list of Werkzeug FileStorage objects (uploaded screenshots),
-    call the vision model to extract raw text. Returns a single big string.
-    """
-    if not files:
-        return ""
-
-    all_text = []
-
-    for img in files:
-        if not img or img.filename == "":
-            continue
-
-        try:
-            img_bytes = img.read()
-            if not img_bytes:
-                continue
-
-            b64 = base64.b64encode(img_bytes).decode("utf-8")
-
-            # Vision OCR call
-            resp = client.chat.completions.create(
-                model="gpt-4.1-mini",  # supports vision
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an OCR engine. Extract ONLY the visible text from this screenshot of a messaging conversation. Do not add explanation, labels, or commentary."
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Extract the raw text exactly as it appears in the chat bubble order."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                temperature=0.0,
-            )
-
-            text_chunk = resp.choices[0].message.content.strip()
-            if text_chunk:
-                all_text.append(text_chunk)
-
-        except Exception as e:
-            print("Error during OCR for an image:", repr(e))
-            # Don't crash on one bad image; just continue
-
-    return "\n\n".join(all_text).strip()
-
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    result = None
-    error = None
-    who = ""
-    context = ""
-    thread = ""
-
-    if request.method == "POST":
-        who = request.form.get("who", "").strip()
-        context = request.form.get("context", "").strip()
-        thread = request.form.get("thread", "").strip()
-        images = request.files.getlist("images") if "images" in request.files else []
-
-        if not API_KEY or client is None:
-            error = "Server is missing the OpenAI API key. (This is a setup issue, not your fault.)"
-        else:
-            # First try to use screenshots, if provided
-            ocr_text = ""
-            if images:
-                ocr_text = extract_text_from_images(images)
-
-            conversation_text = ocr_text or thread
-
-            if not conversation_text:
-                error = "Please upload at least one screenshot or paste the conversation text."
-            else:
-                user_input = f"""
-Who I am in the conversation: {who or "not specified"}
-
-Context: {context or "none provided"}
-
-Text conversation (from screenshots and/or pasted text):
-{conversation_text}
-""".strip()
-
-                try:
-                    completion = client.chat.completions.create(
-                        model="gpt-4.1-mini",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": user_input}
-                        ],
-                        temperature=0.4,
-                    )
-                    result = completion.choices[0].message.content
-                except Exception as e:
-                    print("Error calling OpenAI for intent analysis:", repr(e))
-                    error = "Something went wrong while analyzing the conversation."
-
-    return render_template_string(
-        HTML_TEMPLATE,
-        result=result,
-        error=error,
-        who=who,
-        context=context,
-        thread=thread,
-    )
-
-
-if __name__ == "__main__":
-    # Local testing only; Railway uses gunicorn via Procfile
-    app.run(host="0.0.0.0", port=8000)
