@@ -15,66 +15,234 @@ HTML_TEMPLATE = """
   <head>
     <title>Message Intent Lab</title>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px; max-width: 800px; }
-      textarea { width: 100%; min-height: 200px; font-family: inherit; padding: 8px; }
-      input, button, select { font-family: inherit; padding: 6px 10px; }
-      .field { margin-bottom: 16px; }
-      .label { font-weight: 600; margin-bottom: 4px; display: block; }
-      .result { white-space: pre-wrap; border: 1px solid #ddd; padding: 16px; border-radius: 8px; margin-top: 24px; }
-      .error { color: #b00020; margin-top: 16px; }
-      .hint { font-size: 0.9rem; color: #555; }
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f5f5f7;
+      }
+      .page {
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 24px 12px 40px;
+      }
+      .card {
+        width: 100%;
+        max-width: 640px;
+        background: #ffffff;
+        border-radius: 18px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        padding: 24px 20px 28px;
+      }
+      @media (min-width: 720px) {
+        .card {
+          padding: 28px 28px 32px;
+        }
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 1.6rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .tagline {
+        margin: 0 0 18px;
+        font-size: 0.94rem;
+        color: #4b5563;
+      }
+      .step-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: #6b7280;
+        margin-bottom: 4px;
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+      .field-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 4px;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 3px;
+      }
+      select,
+      textarea,
+      input[type="file"] {
+        width: 100%;
+        font-family: inherit;
+        font-size: 0.94rem;
+        padding: 8px 9px;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        outline: none;
+        background: #f9fafb;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      }
+      select:focus,
+      textarea:focus,
+      input[type="file"]:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+        background: #ffffff;
+      }
+      textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
+      .error {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 0.86rem;
+      }
+      .button-row {
+        margin-top: 10px;
+      }
+      button[type="submit"] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 9px 18px;
+        border-radius: 999px;
+        border: none;
+        font-family: inherit;
+        font-size: 0.96rem;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.35);
+        transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+      }
+      button[type="submit"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.4);
+        opacity: 0.98;
+      }
+      button[type="submit"]:active {
+        transform: translateY(0);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+      }
+      .button-caption {
+        margin-top: 4px;
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
+      .or-divider {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 0;
+        font-size: 0.78rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .or-divider span {
+        flex: 1;
+        height: 1px;
+        background: #e5e7eb;
+      }
+      .result {
+        white-space: pre-wrap;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        padding: 14px 14px 16px;
+        margin-top: 22px;
+        background: #f9fafb;
+        font-size: 0.92rem;
+        color: #111827;
+      }
     </style>
   </head>
   <body>
-    <h1>Message Intent Lab</h1>
-    <p>Upload screenshots or paste a text thread to get a behavioral-science read on the other person's likely intentions.</p>
+    <div class="page">
+      <div class="card">
+        <h1>Message Intent Lab</h1>
+        <p class="tagline">Drop in a convo, get a plain-English read on what the other person was probably trying to do.</p>
 
-    {% if error %}
-      <div class="error"><strong>Error:</strong> {{ error }}</div>
-    {% endif %}
+        {% if error %}
+          <div class="error"><strong>Whoops.</strong> {{ error }}</div>
+        {% endif %}
 
-    <form method="POST" enctype="multipart/form-data">
-      <div class="field">
-        <label class="label" for="who">Who are you in the conversation?</label>
-        <select name="who" id="who" required>
-          <option value="">Select...</option>
-          <option {% if who == "Person A / first speaker" %}selected{% endif %}>Person A / first speaker</option>
-          <option {% if who == "Person B / second speaker" %}selected{% endif %}>Person B / second speaker</option>
-          <option {% if who == "Blue bubbles" %}selected{% endif %}>Blue bubbles</option>
-          <option {% if who == "Gray bubbles" %}selected{% endif %}>Gray bubbles</option>
-        </select>
+        <form method="POST" enctype="multipart/form-data">
+          <!-- STEP 1 -->
+          <div class="field">
+            <div class="step-label">Step 1 · You</div>
+            <div class="field-title">Who are you in the conversation?</div>
+            <select name="who" id="who" required>
+              <option value="">Tap to choose…</option>
+              <option {% if who == "Person A / first speaker" %}selected{% endif %}>Person A / first speaker</option>
+              <option {% if who == "Person B / second speaker" %}selected{% endif %}>Person B / second speaker</option>
+              <option {% if who == "Blue bubbles" %}selected{% endif %}>Blue bubbles</option>
+              <option {% if who == "Gray bubbles" %}selected{% endif %}>Gray bubbles</option>
+            </select>
+            <p class="hint">If this is iMessage, “blue bubbles” = you, “gray bubbles” = them.</p>
+          </div>
+
+          <!-- STEP 2 -->
+          <div class="field">
+            <div class="step-label">Step 2 · What’s going on?</div>
+            <div class="field-title">Give 1–2 sentences of context (optional)</div>
+            <textarea name="context" id="context" placeholder="Example: We’ve been talking for a month and things suddenly got weird.">{{ context or "" }}</textarea>
+          </div>
+
+          <!-- STEP 3A: screenshots -->
+          <div class="field">
+            <div class="step-label">Step 3 · Add the conversation</div>
+            <div class="field-title">Easiest: upload screenshots</div>
+            <input type="file" name="images" id="images" accept="image/*" multiple>
+            <p class="hint">Upload 1–3 screenshots of the chat, earliest message first. I’ll read the bubbles for you.</p>
+          </div>
+
+          <div class="or-divider">
+            <span></span> or paste the messages <span></span>
+          </div>
+
+          <!-- STEP 3B: text -->
+          <div class="field">
+            <div class="field-title">Or paste the text instead</div>
+            <textarea name="thread" id="thread" placeholder="Copy the convo and paste it here, starting from the first message.">{{ thread or "" }}</textarea>
+          </div>
+
+          <div class="button-row">
+            <button type="submit">Analyze intentions</button>
+            <div class="button-caption">I’ll send back a short, non-judgy breakdown of what they were likely doing.</div>
+          </div>
+        </form>
+
+        {% if result %}
+          <div class="result">
+            <strong>Intent Snapshot</strong>
+            <br><br>
+            {{ result }}
+          </div>
+        {% endif %}
       </div>
-
-      <div class="field">
-        <label class="label" for="context">Optional: 1–2 sentences of context</label>
-        <textarea name="context" id="context" placeholder="e.g., We've been casually dating for 2 months. Things felt normal until last week.">{{ context or "" }}</textarea>
-      </div>
-
-      <div class="field">
-        <label class="label" for="images">Screenshots (PNG/JPG/HEIC, earliest message first)</label>
-        <input type="file" name="images" id="images" accept="image/*" multiple>
-        <div class="hint">You can upload 1–3 screenshots of the conversation, or skip this and just paste the text below.</div>
-      </div>
-
-      <div class="field">
-        <label class="label" for="thread">Text thread (paste in order, earliest at the top)</label>
-        <textarea name="thread" id="thread" placeholder="Optional if you uploaded screenshots. Paste the conversation here in order.">{{ thread or "" }}</textarea>
-        <div class="hint">If you upload screenshots, I'll try to read the text from them first and only fall back to this box if needed.</div>
-      </div>
-
-      <button type="submit">Analyze intentions</button>
-    </form>
-
-    {% if result %}
-      <div class="result">
-        <h2>Intent Snapshot</h2>
-        {{ result }}
-      </div>
-    {% endif %}
+    </div>
   </body>
 </html>
 """
+
 
 SYSTEM_PROMPT = """
 You are a behavioral scientist specializing in interpersonal communication, attachment patterns, and conflict dynamics.
