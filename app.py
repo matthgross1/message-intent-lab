@@ -17,17 +17,21 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       :root {
-        color-scheme: light;
+        color-scheme: dark;
       }
+
       * {
         box-sizing: border-box;
       }
+
       body {
         margin: 0;
         padding: 0;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: radial-gradient(circle at top, #eef2ff 0, #f5f5f7 45%);
+        background: #0c0c12;
+        color: #f3f4f6;
       }
+
       .page {
         min-height: 100vh;
         display: flex;
@@ -35,186 +39,212 @@ HTML_TEMPLATE = """
         justify-content: center;
         padding: 24px 12px 40px;
       }
+
       .card {
         width: 100%;
         max-width: 640px;
-        background: #ffffff;
-        border-radius: 20px;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-        padding: 24px 20px 28px;
+        background: #13131a;
+        border-radius: 18px;
+        padding: 28px 24px 32px;
+        box-shadow: 0 15px 45px rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.06);
       }
-      @media (min-width: 720px) {
-        .card {
-          padding: 28px 28px 32px;
-        }
-      }
+
       h1 {
-        margin: 0 0 6px;
-        font-size: 1.65rem;
-        font-weight: 680;
+        margin: 0 0 8px;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fafafa;
         letter-spacing: -0.03em;
       }
+
       .tagline {
-        margin: 0 0 4px;
-        font-size: 0.98rem;
-        color: #111827;
+        margin: 0 0 6px;
+        font-size: 1.05rem;
         font-weight: 500;
+        color: #c5c6d0;
       }
+
       .subline {
-        margin: 0 0 18px;
-        font-size: 0.9rem;
-        color: #4b5563;
+        margin: 0 0 22px;
+        font-size: 0.92rem;
+        color: #8f90a0;
       }
+
       .step-label {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.09em;
-        color: #6b7280;
+        letter-spacing: 0.1em;
         margin-bottom: 4px;
+        color: #7c7d88;
       }
+
       .field {
-        margin-bottom: 16px;
+        margin-bottom: 18px;
       }
+
       .field-title {
+        font-size: 1rem;
         font-weight: 600;
-        font-size: 0.95rem;
         margin-bottom: 4px;
+        color: #e4e4eb;
       }
-      .hint {
-        font-size: 0.8rem;
-        color: #6b7280;
-        margin-top: 3px;
-      }
+
       textarea,
       input[type="file"] {
         width: 100%;
         font-family: inherit;
-        font-size: 0.94rem;
-        padding: 8px 9px;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-        outline: none;
-        background: #f9fafb;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-      }
-      textarea {
-        min-height: 90px;
-        resize: vertical;
-      }
-      textarea:focus,
-      input[type="file"]:focus {
-        border-color: #6366f1;
-        box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
-        background: #ffffff;
-      }
-      .error {
-        margin-bottom: 12px;
+        font-size: 0.92rem;
         padding: 10px 12px;
         border-radius: 10px;
-        background: #fef2f2;
-        color: #b91c1c;
-        font-size: 0.86rem;
+        border: 1px solid #2b2c34;
+        outline: none;
+        background: #181820;
+        color: #ffffff;
+        transition: border 0.15s ease, background 0.15s ease;
       }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      textarea:focus,
+      input[type="file"]:focus {
+        border-color: #5d5dfc;
+        background: #1e1e27;
+      }
+
+      .hint {
+        font-size: 0.8rem;
+        color: #6a6b78;
+        margin-top: 3px;
+      }
+
+      .error {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(255, 0, 0, 0.15);
+        color: #ff9b9b;
+        margin-bottom: 16px;
+        border: 1px solid rgba(255, 0, 0, 0.25);
+      }
+
       .button-row {
-        margin-top: 10px;
+        margin-top: 12px;
+        text-align: center;
       }
+
       button[type="submit"] {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 9px 18px;
+        padding: 10px 22px;
         border-radius: 999px;
         border: none;
         font-family: inherit;
-        font-size: 0.96rem;
+        font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #5d5dfc, #9b5dfc);
         color: #ffffff;
-        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.35);
-        transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+        box-shadow: 0 8px 25px rgba(93, 93, 252, 0.35);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
+
       button[type="submit"]:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.4);
-        opacity: 0.98;
+        transform: translateY(-2px);
+        box-shadow: 0 12px 32px rgba(93, 93, 252, 0.45);
       }
+
       button[type="submit"]:active {
         transform: translateY(0);
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        box-shadow: 0 6px 16px rgba(93, 93, 252, 0.4);
       }
+
       .button-caption {
-        margin-top: 4px;
-        font-size: 0.8rem;
-        color: #6b7280;
+        margin-top: 6px;
+        font-size: 0.83rem;
+        color: #73748a;
       }
+
       .or-divider {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin: 10px 0;
-        font-size: 0.78rem;
-        color: #9ca3af;
+        gap: 10px;
+        margin: 14px 0;
+        font-size: 0.75rem;
+        color: #5f6070;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.15em;
       }
+
       .or-divider span {
         flex: 1;
         height: 1px;
-        background: #e5e7eb;
+        background: #2d2d35;
       }
 
+      /* Result card */
+
       .result {
-        border-radius: 18px;
-        border: 1px solid #e5e7eb;
-        padding: 16px 16px 18px;
-        margin-top: 22px;
-        background: radial-gradient(circle at top left, #ede9fe, #f9fafb 55%);
-        font-size: 0.92rem;
-        color: #111827;
+        margin-top: 26px;
+        padding: 20px 18px;
+        background: #181820;
+        border: 1px solid #30303a;
+        border-radius: 20px;
+        box-shadow: 0 8px 35px rgba(0, 0, 0, 0.45);
+        color: #ececf5;
       }
+
       .quick-take {
-        font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 10px;
+        font-size: 1.05rem;
+        font-weight: 650;
+        margin-bottom: 12px;
+        color: #eaeaff;
       }
+
       .badges {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 12px;
+        gap: 8px;
+        margin-bottom: 16px;
       }
+
       .badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 3px 9px;
+        padding: 4px 10px;
         border-radius: 999px;
-        font-size: 0.78rem;
-        background: #eef2ff;
-        color: #3730a3;
-        border: 1px solid #e0e7ff;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(93, 93, 252, 0.15);
+        border: 1px solid rgba(93, 93, 252, 0.45);
+        color: #b1b1ff;
       }
+
       .section {
-        margin-top: 8px;
+        margin-top: 12px;
       }
+
       .section h3 {
-        margin: 0 0 4px;
-        font-size: 0.86rem;
+        margin: 0 0 6px;
+        font-size: 0.82rem;
         text-transform: uppercase;
-        letter-spacing: 0.09em;
-        color: #6b7280;
+        letter-spacing: 0.11em;
+        color: #8f90a5;
       }
+
       .section ul {
         margin: 0 0 6px 1.1rem;
         padding: 0;
       }
+
       .section li {
-        margin-bottom: 3px;
+        margin-bottom: 4px;
+        color: #d5d5e0;
       }
+
       .section p {
-        margin: 2px 0;
+        margin: 4px 0;
+        color: #c2c2d3;
+        line-height: 1.35;
       }
     </style>
   </head>
@@ -348,7 +378,7 @@ def extract_text_from_images(files):
             b64 = base64.b64encode(img_bytes).decode("utf-8")
 
             resp = client.chat.completions.create(
-                model="gpt-4.1-mini",  # supports vision
+                model="gpt-4.1-mini",
                 messages=[
                     {
                         "role": "system",
