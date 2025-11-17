@@ -26,7 +26,7 @@ HTML_TEMPLATE = """
         margin: 0;
         padding: 0;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #f5f5f7;
+        background: radial-gradient(circle at top, #eef2ff 0, #f5f5f7 45%);
       }
       .page {
         min-height: 100vh;
@@ -39,8 +39,8 @@ HTML_TEMPLATE = """
         width: 100%;
         max-width: 640px;
         background: #ffffff;
-        border-radius: 18px;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        border-radius: 20px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
         padding: 24px 20px 28px;
       }
       @media (min-width: 720px) {
@@ -50,9 +50,9 @@ HTML_TEMPLATE = """
       }
       h1 {
         margin: 0 0 6px;
-        font-size: 1.6rem;
-        font-weight: 650;
-        letter-spacing: -0.02em;
+        font-size: 1.65rem;
+        font-weight: 680;
+        letter-spacing: -0.03em;
       }
       .tagline {
         margin: 0 0 4px;
@@ -165,20 +165,56 @@ HTML_TEMPLATE = """
         height: 1px;
         background: #e5e7eb;
       }
+
       .result {
-        white-space: pre-wrap;
-        border-radius: 14px;
+        border-radius: 18px;
         border: 1px solid #e5e7eb;
-        padding: 14px 14px 16px;
+        padding: 16px 16px 18px;
         margin-top: 22px;
-        background: #f9fafb;
+        background: radial-gradient(circle at top left, #ede9fe, #f9fafb 55%);
         font-size: 0.92rem;
         color: #111827;
       }
-      .result strong {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 0.94rem;
+      .quick-take {
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 10px;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        background: #eef2ff;
+        color: #3730a3;
+        border: 1px solid #e0e7ff;
+      }
+      .section {
+        margin-top: 8px;
+      }
+      .section h3 {
+        margin: 0 0 4px;
+        font-size: 0.86rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: #6b7280;
+      }
+      .section ul {
+        margin: 0 0 6px 1.1rem;
+        padding: 0;
+      }
+      .section li {
+        margin-bottom: 3px;
+      }
+      .section p {
+        margin: 2px 0;
       }
     </style>
   </head>
@@ -201,14 +237,14 @@ HTML_TEMPLATE = """
               name="context"
               id="context"
               placeholder="Example: We have been talking for a month and he suddenly pulled back after last weekend.">{{ context or "" }}</textarea>
-            <p class="hint">Totally optional. It just helps the interpretation feel more accurate.</p>
+            <p class="hint">Optional, it just helps the interpretation feel more accurate.</p>
           </div>
 
           <div class="field">
             <div class="step-label">Step 2</div>
             <div class="field-title">Add the conversation</div>
             <input type="file" name="images" id="images" accept="image/*" multiple>
-            <p class="hint">Best option is 1 to 3 screenshots of the chat from your phone, earliest messages first. Assume you are the blue bubble.</p>
+            <p class="hint">Best option is 1 to 3 screenshots from your phone, earliest messages first. Assume you are the blue bubble.</p>
           </div>
 
           <div class="or-divider">
@@ -225,14 +261,13 @@ HTML_TEMPLATE = """
 
           <div class="button-row">
             <button type="submit">Decode the vibe</button>
-            <div class="button-caption">You get a short breakdown of what his messages likely meant, without the overthinking spiral.</div>
+            <div class="button-caption">You get a short breakdown of what his messages likely meant, without the spiral.</div>
           </div>
         </form>
 
         {% if result %}
           <div class="result">
-            <strong>Here is what this probably means</strong>
-            {{ result }}
+            {{ result|safe }}
           </div>
         {% endif %}
       </div>
@@ -248,37 +283,47 @@ The user will share a text message conversation and a bit of context. Assume the
 
 Your job is to decode the OTHER person's likely intentions and emotional motives. The user already knows what the messages literally said. They are here for SUBTEXT, not recap.
 
-CRITICAL CONSTRAINTS:
-- Do NOT retell the conversation.
-- Do NOT paraphrase messages.
-- Do NOT write long paragraphs.
-- Total output should usually stay under 220 words.
-- Each bullet should be short and direct (max ~15 words).
-- Tone: clear, honest, a bit blunt, but not cruel. No therapy voice.
+CRITICAL RULES:
+- Do not retell or paraphrase the conversation.
+- Do not write long paragraphs.
+- Total output should usually stay under 200 words.
+- Bullets should be short and direct (about 15 words or less).
+- Tone: clear, honest, a little blunt, not clinical, not self help.
 
-Format the answer in EXACTLY these four sections, with headings:
+Return valid HTML that fits exactly this structure:
 
-1. Quick Take
-- 1–2 short sentences that give the main vibe (e.g., "He is keeping you as a backup while avoiding direct rejection.")
+<div class="quick-take">
+  One short sentence with your main verdict. You can include one emoji if it fits.
+</div>
 
-2. What They Were Probably Trying To Do
-- 3–6 bullets
-- Focus on motives and strategy (e.g., "Keeping you interested without committing," "Avoiding conflict," "Testing if you will chase.")
-- No restating what they wrote. Only interpret why.
+<div class="badges">
+  <span class="badge">Interest: Mixed</span>
+  <span class="badge">Effort: Low</span>
+  <span class="badge">Vibe: Avoidant</span>
+</div>
 
-3. Signals About Their Interest Level
-- 3 bullets
-- Comment on consistency, effort, responsiveness, and emotional availability.
-- End with a final line: "Overall interest level: Low / Mixed / High" (pick one).
+<div class="section">
+  <h3>Top signals</h3>
+  <ul>
+    <li>Short, sharp bullet about what their behavior suggests.</li>
+    <li>Another bullet about a clear pattern or motive you see.</li>
+    <li>Another bullet about how they manage distance, control, or attention.</li>
+  </ul>
+</div>
 
-4. Other Ways This Could Go
-- 2 bullets with alternative but plausible interpretations.
-- Phrase clearly as possibilities (e.g., "They might actually be slammed but still interested.")
-- No more than 2 bullets.
+<div class="section">
+  <h3>Deeper read</h3>
+  <p>One short sentence about the emotional pattern behind their behavior.</p>
+  <p>One short sentence about what they are probably trying to protect (ego, control, comfort, options).</p>
+</div>
 
-Do NOT give advice about what the user should do next.
-Do NOT suggest exact replies.
-Your entire job is to decode what the other person was probably trying to signal.
+Guidelines:
+- Always fill all four parts above.
+- The three badges should always start with labels: Interest, Effort, Vibe.
+- After the labels, use one or two words like Low, High, Mixed, Warm, Cold, Guarded, Confused.
+- Focus on motives, strategy, and emotional patterns, not what was typed.
+- Do not tell the user what they should do or what to text back.
+- Your entire job is to decode what the other person was probably trying to signal.
 """
 
 def extract_text_from_images(files):
@@ -307,7 +352,7 @@ def extract_text_from_images(files):
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an OCR engine. Extract ONLY the visible text from this screenshot of a messaging conversation. Do not add explanation, labels, or commentary."
+                        "content": "You are an OCR engine. Extract only the visible text from this screenshot of a messaging conversation. Do not add explanation, labels, or commentary."
                     },
                     {
                         "role": "user",
@@ -352,7 +397,7 @@ def index():
         images = request.files.getlist("images") if "images" in request.files else []
 
         if not API_KEY or client is None:
-            error = "Server is missing the OpenAI API key. (This is a setup issue, not your fault.)"
+            error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
         else:
             ocr_text = ""
             if images:
