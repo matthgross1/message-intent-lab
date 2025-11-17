@@ -1,3 +1,13 @@
+import os
+import base64
+from flask import Flask, render_template_string, request
+from openai import OpenAI
+
+app = Flask(__name__)
+
+API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=API_KEY) if API_KEY else None
+
 HTML_TEMPLATE = """
 <!doctype html>
 <html>
@@ -76,7 +86,6 @@ HTML_TEMPLATE = """
         color: #6b7280;
         margin-top: 3px;
       }
-      select,
       textarea,
       input[type="file"] {
         width: 100%;
@@ -93,7 +102,6 @@ HTML_TEMPLATE = """
         min-height: 90px;
         resize: vertical;
       }
-      select:focus,
       textarea:focus,
       input[type="file"]:focus {
         border-color: #6366f1;
@@ -186,7 +194,6 @@ HTML_TEMPLATE = """
         {% endif %}
 
         <form method="POST" enctype="multipart/form-data">
-          <!-- STEP 1 -->
           <div class="field">
             <div class="step-label">Step 1</div>
             <div class="field-title">What is the situation?</div>
@@ -197,7 +204,6 @@ HTML_TEMPLATE = """
             <p class="hint">Totally optional. It just helps the interpretation feel more accurate.</p>
           </div>
 
-          <!-- STEP 2: screenshots -->
           <div class="field">
             <div class="step-label">Step 2</div>
             <div class="field-title">Add the conversation</div>
@@ -209,7 +215,6 @@ HTML_TEMPLATE = """
             <span></span> or paste the messages <span></span>
           </div>
 
-          <!-- STEP 2B: text -->
           <div class="field">
             <div class="field-title">Or paste the messages instead</div>
             <textarea
@@ -235,3 +240,136 @@ HTML_TEMPLATE = """
   </body>
 </html>
 """
+
+SYSTEM_PROMPT = """
+You are a behavioral scientist specializing in interpersonal communication, attachment patterns, and mixed signals in dating and friendships.
+
+The user will share a text message conversation and a bit of context. Assume the user is the blue bubble unless they say otherwise.
+
+Your job is to infer the other person's likely intentions and emotional motives, not to give definitive answers.
+
+Please give your output in exactly four clearly labeled sections:
+
+1. Surface-Level Summary (2–3 sentences)
+2. Likely Intentions of the Other Person (3–5 bullets)
+3. Emotional / Psychological Patterns You See (1–2 paragraphs)
+4. Ambiguities and Alternative Reads (2–3 bullets)
+
+Do NOT tell the user what to text back or how to live their life.
+Focus on decoding what the OTHER person was probably trying to signal.
+"""
+
+def extract_text_from_images(files):
+    """
+    Take a list of uploaded image files and use the vision model
+    to extract raw text from screenshots of chats.
+    """
+    if not files:
+        return ""
+
+    all_text = []
+
+    for img in files:
+        if not img or img.filename == "":
+            continue
+
+        try:
+            img_bytes = img.read()
+            if not img_bytes:
+                continue
+
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+            resp = client.chat.completions.create(
+                model="gpt-4.1-mini",  # supports vision
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an OCR engine. Extract ONLY the visible text from this screenshot of a messaging conversation. Do not add explanation, labels, or commentary."
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Extract the raw text exactly as it appears in the chat bubble order."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.0,
+            )
+
+            text_chunk = resp.choices[0].message.content.strip()
+            if text_chunk:
+                all_text.append(text_chunk)
+
+        except Exception as e:
+            print("Error during OCR for an image:", repr(e))
+            # skip bad image, continue with others
+
+    return "\n\n".join(all_text).strip()
+
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    result = None
+    error = None
+    context = ""
+    thread = ""
+
+    if request.method == "POST":
+        context = request.form.get("context", "").strip()
+        thread = request.form.get("thread", "").strip()
+        images = request.files.getlist("images") if "images" in request.files else []
+
+        if not API_KEY or client is None:
+            error = "Server is missing the OpenAI API key. (This is a setup issue, not your fault.)"
+        else:
+            ocr_text = ""
+            if images:
+                ocr_text = extract_text_from_images(images)
+
+            conversation_text = ocr_text or thread
+
+            if not conversation_text:
+                error = "Please upload at least one screenshot or paste the conversation text."
+            else:
+                user_input = f"""
+Context: {context or "none provided"}
+
+Text conversation (from screenshots and/or pasted text):
+{conversation_text}
+""".strip()
+
+                try:
+                    completion = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": user_input}
+                        ],
+                        temperature=0.4,
+                    )
+                    result = completion.choices[0].message.content
+                except Exception as e:
+                    print("Error calling OpenAI for intent analysis:", repr(e))
+                    error = "Something went wrong while analyzing the conversation."
+
+    return render_template_string(
+        HTML_TEMPLATE,
+        result=result,
+        error=error,
+        context=context,
+        thread=thread,
+    )
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
