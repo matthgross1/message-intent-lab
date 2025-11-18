@@ -226,6 +226,47 @@ HTML_TEMPLATE = """
         border: 1px solid rgba(129, 140, 248, 0.8);
         color: #e0e7ff;
       }
+        .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .result-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #9ca3af;
+  }
+
+  .share-btn {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #4b5563;
+    background: #111827;
+    color: #e5e7eb;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .share-btn:hover {
+    background: #1f2937;
+    border-color: #6b7280;
+  }
+
+  .share-btn:active {
+    background: #030712;
+  }
+
+  .result-body {
+    margin-top: 4px;
+  }
+
 
       .section {
         margin-top: 12px;
@@ -337,31 +378,63 @@ HTML_TEMPLATE = """
           </div>
         </form>
 
-        {% if result %}
-          <div class="result">
-            {{ result|safe }}
-          </div>
-        {% endif %}
+  {% if result %}
+  <div class="result">
+    <div class="result-header">
+      <span class="result-label">Result</span>
+      <button type="button" class="share-btn" id="share-btn">Share</button>
+    </div>
+    <div class="result-body">
+      {{ result|safe }}
+    </div>
+  </div>
+{% endif %}
+
       </div>
     </div>
 
-    <script>
-      document.addEventListener("DOMContentLoaded", function () {
-        var form = document.getElementById("analyze-form");
-        var button = document.getElementById("submit-btn");
-        var label = button ? button.querySelector(".btn-label") : null;
+   <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var form = document.getElementById("analyze-form");
+    var button = document.getElementById("submit-btn");
+    var label = button ? button.querySelector(".btn-label") : null;
 
-        if (!form || !button || !label) return;
+    if (form && button && label) {
+      form.addEventListener("submit", function () {
+        if (button.classList.contains("loading")) return;
 
-        form.addEventListener("submit", function () {
-          if (button.classList.contains("loading")) return;
-
-          button.classList.add("loading");
-          button.disabled = true;
-          label.textContent = "Decoding...";
-        });
+        button.classList.add("loading");
+        button.disabled = true;
+        label.textContent = "Decoding...";
       });
-    </script>
+    }
+
+    var shareBtn = document.getElementById("share-btn");
+    if (shareBtn) {
+      shareBtn.addEventListener("click", async function () {
+        const baseUrl = window.location.href.split("?")[0];
+        const shareText = "Here is the vibe read I got from Message Intent Lab:";
+        try {
+          if (navigator.share) {
+            await navigator.share({
+              title: "Message Intent Lab",
+              text: shareText,
+              url: baseUrl
+            });
+          } else if (navigator.clipboard) {
+            await navigator.clipboard.writeText(baseUrl);
+            alert("Link copied. Paste it in your group chat.");
+          } else {
+            alert("Sharing is not supported in this browser. You can still screenshot this.");
+          }
+        } catch (e) {
+          console.error("Share failed:", e);
+        }
+      });
+    }
+  });
+</script>
+
   </body>
 </html>
 """
