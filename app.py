@@ -250,6 +250,37 @@ HTML_TEMPLATE = """
     color: #e5e7eb;
     line-height: 1.35;
   }
+
+    /* Loading state for button */
+  .btn-spinner {
+    display: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid rgba(249, 250, 251, 0.4);
+    border-top-color: #ffffff;
+    margin-left: 8px;
+    animation: spin 0.7s linear infinite;
+  }
+
+  button.loading .btn-spinner {
+    display: inline-block;
+  }
+
+  button.loading .btn-label {
+    opacity: 0.7;
+  }
+
+  button.loading {
+    cursor: wait;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
 </style>
 
   </head>
@@ -264,7 +295,7 @@ HTML_TEMPLATE = """
           <div class="error"><strong>Whoops.</strong> {{ error }}</div>
         {% endif %}
 
-        <form method="POST" enctype="multipart/form-data">
+        <form id="analyze-form" method="POST" enctype="multipart/form-data">
           <div class="field">
             <div class="step-label">Step 1</div>
             <div class="field-title">What is the situation?</div>
@@ -294,10 +325,14 @@ HTML_TEMPLATE = """
               placeholder="Copy the chat and paste it here, starting from the first message.">{{ thread or "" }}</textarea>
           </div>
 
-          <div class="button-row">
-            <button type="submit">Decode the vibe</button>
-            <div class="button-caption">You get a short breakdown of what his messages likely meant, without the spiral.</div>
-          </div>
+        <div class="button-row">
+  <button type="submit" id="submit-btn">
+    <span class="btn-label">Decode the vibe</span>
+    <span class="btn-spinner" aria-hidden="true"></span>
+  </button>
+  <div class="button-caption">You get a short breakdown of what his messages likely meant, without the spiral.</div>
+</div>
+
         </form>
 
         {% if result %}
@@ -307,6 +342,23 @@ HTML_TEMPLATE = """
         {% endif %}
       </div>
     </div>
+    <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var form = document.getElementById("analyze-form");
+    var button = document.getElementById("submit-btn");
+    var label = button ? button.querySelector(".btn-label") : null;
+
+    if (!form || !button || !label) return;
+
+    form.addEventListener("submit", function () {
+      if (button.classList.contains("loading")) return;
+
+      button.classList.add("loading");
+      button.disabled = true;
+      label.textContent = "Decoding...";
+    });
+  });
+</script>
   </body>
 </html>
 """
