@@ -482,6 +482,23 @@ def index():
         context = request.form.get("context", "").strip()
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
+        
+import datetime
+import logging
+
+# at top of file after imports
+logging.basicConfig(level=logging.INFO)
+
+# inside index(), right before the OpenAI call:
+logging.info(
+    "submission",
+    extra={
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "has_images": bool(images),
+        "has_text": bool(thread),
+        "context_len": len(context),
+    },
+)
 
         if not API_KEY or client is None:
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
