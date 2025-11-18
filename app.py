@@ -1,7 +1,12 @@
 import os
 import base64
+import logging
+import datetime
 from flask import Flask, render_template_string, request
 from openai import OpenAI
+
+logging.basicConfig(level=logging.INFO)
+
 
 app = Flask(__name__)
 
@@ -482,6 +487,12 @@ def index():
         context = request.form.get("context", "").strip()
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
+
+    # Log anonymous usage data
+    logging.info(
+        f"[SUBMISSION] time={datetime.datetime.utcnow().isoformat()} "
+        f"images={bool(images)} text={bool(thread)} context_len={len(context)}"
+    )
 
         if not API_KEY or client is None:
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
