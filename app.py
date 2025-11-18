@@ -7,7 +7,6 @@ from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO)
 
-
 app = Flask(__name__)
 
 API_KEY = os.getenv("OPENAI_API_KEY")
@@ -21,273 +20,272 @@ HTML_TEMPLATE = """
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-  :root {
-    color-scheme: dark;
-  }
+      :root {
+        color-scheme: dark;
+      }
 
-  * {
-    box-sizing: border-box;
-  }
+      * {
+        box-sizing: border-box;
+      }
 
-  body {
-    margin: 0;
-    padding: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #050509;
-    color: #f9fafb;
-  }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #050509;
+        color: #f9fafb;
+      }
 
-  .page {
-    min-height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 24px 12px 40px;
-  }
+      .page {
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 24px 12px 40px;
+      }
 
-  .card {
-    width: 100%;
-    max-width: 640px;
-    background: #12121a;
-    border-radius: 18px;
-    padding: 28px 24px 32px;
-    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-  }
+      .card {
+        width: 100%;
+        max-width: 640px;
+        background: #12121a;
+        border-radius: 18px;
+        padding: 28px 24px 32px;
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
 
-  h1 {
-    margin: 0 0 8px;
-    font-size: 1.8rem;
-    font-weight: 720;
-    color: #ffffff;
-    letter-spacing: -0.03em;
-  }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.8rem;
+        font-weight: 720;
+        color: #ffffff;
+        letter-spacing: -0.03em;
+      }
 
-  .tagline {
-    margin: 0 0 6px;
-    font-size: 1.02rem;
-    font-weight: 520;
-    color: #f3f4ff;
-  }
+      .tagline {
+        margin: 0 0 6px;
+        font-size: 1.02rem;
+        font-weight: 520;
+        color: #f3f4ff;
+      }
 
-  .subline {
-    margin: 0 0 22px;
-    font-size: 0.92rem;
-    color: #d1d5db;
-  }
+      .subline {
+        margin: 0 0 22px;
+        font-size: 0.92rem;
+        color: #d1d5db;
+      }
 
-  .step-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 4px;
-    color: #9ca3af;
-  }
+      .step-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 4px;
+        color: #9ca3af;
+      }
 
-  .field {
-    margin-bottom: 18px;
-  }
+      .field {
+        margin-bottom: 18px;
+      }
 
-  .field-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 4px;
-    color: #f9fafb;
-  }
+      .field-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #f9fafb;
+      }
 
-  textarea,
-  input[type="file"] {
-    width: 100%;
-    font-family: inherit;
-    font-size: 0.94rem;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid #3f3f4c;
-    outline: none;
-    background: #181822;
-    color: #f9fafb;
-    transition: border 0.15s ease, background 0.15s ease;
-  }
+      textarea,
+      input[type="file"] {
+        width: 100%;
+        font-family: inherit;
+        font-size: 0.94rem;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #3f3f4c;
+        outline: none;
+        background: #181822;
+        color: #f9fafb;
+        transition: border 0.15s ease, background 0.15s ease;
+      }
 
-  textarea {
-    min-height: 110px;
-    resize: vertical;
-  }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
 
-  textarea:focus,
-  input[type="file"]:focus {
-    border-color: #8b5cf6;
-    background: #1f1f2b;
-  }
+      textarea:focus,
+      input[type="file"]:focus {
+        border-color: #8b5cf6;
+        background: #1f1f2b;
+      }
 
-  textarea::placeholder {
-    color: #9ca3af;
-  }
+      textarea::placeholder {
+        color: #9ca3af;
+      }
 
-  .hint {
-    font-size: 0.8rem;
-    color: #d1d5db;
-    margin-top: 3px;
-  }
+      .hint {
+        font-size: 0.8rem;
+        color: #d1d5db;
+        margin-top: 3px;
+      }
 
-  .error {
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: rgba(248, 113, 113, 0.12);
-    color: #fecaca;
-    margin-bottom: 16px;
-    border: 1px solid rgba(248, 113, 113, 0.6);
-  }
+      .error {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(248, 113, 113, 0.12);
+        color: #fecaca;
+        margin-bottom: 16px;
+        border: 1px solid rgba(248, 113, 113, 0.6);
+      }
 
-  .button-row {
-    margin-top: 12px;
-    text-align: center;
-  }
+      .button-row {
+        margin-top: 12px;
+        text-align: center;
+      }
 
-  button[type="submit"] {
-    padding: 10px 22px;
-    border-radius: 999px;
-    border: none;
-    font-family: inherit;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    background: radial-gradient(circle at 20% 0, #a855f7, #6366f1);
-    color: #ffffff;
-    box-shadow: 0 10px 28px rgba(79, 70, 229, 0.6);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
+      button[type="submit"] {
+        padding: 10px 22px;
+        border-radius: 999px;
+        border: none;
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        background: radial-gradient(circle at 20% 0, #a855f7, #6366f1);
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(79, 70, 229, 0.6);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
 
-  button[type="submit"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 14px 36px rgba(79, 70, 229, 0.75);
-  }
+      button[type="submit"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 36px rgba(79, 70, 229, 0.75);
+      }
 
-  button[type="submit"]:active {
-    transform: translateY(0);
-    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.65);
-  }
+      button[type="submit"]:active {
+        transform: translateY(0);
+        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.65);
+      }
 
-  .button-caption {
-    margin-top: 6px;
-    font-size: 0.83rem;
-    color: #e5e7eb;
-  }
+      .button-caption {
+        margin-top: 6px;
+        font-size: 0.83rem;
+        color: #e5e7eb;
+      }
 
-  .or-divider {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 14px 0;
-    font-size: 0.75rem;
-    color: #9ca3af;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-  }
+      .or-divider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 14px 0;
+        font-size: 0.75rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+      }
 
-  .or-divider span {
-    flex: 1;
-    height: 1px;
-    background: #27272f;
-  }
+      .or-divider span {
+        flex: 1;
+        height: 1px;
+        background: #27272f;
+      }
 
-  /* Result card */
+      /* Result card */
 
-  .result {
-    margin-top: 26px;
-    padding: 20px 18px;
-    background: #181824;
-    border: 1px solid #4b4b5b;
-    border-radius: 20px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
-    color: #f9fafb;
-  }
+      .result {
+        margin-top: 26px;
+        padding: 20px 18px;
+        background: #181824;
+        border: 1px solid #4b4b5b;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+        color: #f9fafb;
+      }
 
-  .quick-take {
-    font-size: 1.05rem;
-    font-weight: 660;
-    margin-bottom: 12px;
-    color: #fefefe;
-  }
+      .quick-take {
+        font-size: 1.05rem;
+        font-weight: 660;
+        margin-bottom: 12px;
+        color: #fefefe;
+      }
 
-  .badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
 
-  .badge {
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: rgba(59, 130, 246, 0.18);
-    border: 1px solid rgba(129, 140, 248, 0.8);
-    color: #e0e7ff;
-  }
+      .badge {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(59, 130, 246, 0.18);
+        border: 1px solid rgba(129, 140, 248, 0.8);
+        color: #e0e7ff;
+      }
 
-  .section {
-    margin-top: 12px;
-  }
+      .section {
+        margin-top: 12px;
+      }
 
-  .section h3 {
-    margin: 0 0 6px;
-    font-size: 0.82rem;
-    text-transform: uppercase;
-    letter-spacing: 0.11em;
-    color: #9ca3af;
-  }
+      .section h3 {
+        margin: 0 0 6px;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+        color: #9ca3af;
+      }
 
-  .section ul {
-    margin: 0 0 6px 1.1rem;
-    padding: 0;
-  }
+      .section ul {
+        margin: 0 0 6px 1.1rem;
+        padding: 0;
+      }
 
-  .section li {
-    margin-bottom: 4px;
-    color: #e5e7eb;
-  }
+      .section li {
+        margin-bottom: 4px;
+        color: #e5e7eb;
+      }
 
-  .section p {
-    margin: 4px 0;
-    color: #e5e7eb;
-    line-height: 1.35;
-  }
+      .section p {
+        margin: 4px 0;
+        color: #e5e7eb;
+        line-height: 1.35;
+      }
 
-    /* Loading state for button */
-  .btn-spinner {
-    display: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 999px;
-    border: 2px solid rgba(249, 250, 251, 0.4);
-    border-top-color: #ffffff;
-    margin-left: 8px;
-    animation: spin 0.7s linear infinite;
-  }
+      /* Loading spinner on button */
 
-  button.loading .btn-spinner {
-    display: inline-block;
-  }
+      .btn-spinner {
+        display: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(249, 250, 251, 0.4);
+        border-top-color: #ffffff;
+        margin-left: 8px;
+        animation: spin 0.7s linear infinite;
+      }
 
-  button.loading .btn-label {
-    opacity: 0.7;
-  }
+      button.loading .btn-spinner {
+        display: inline-block;
+      }
 
-  button.loading {
-    cursor: wait;
-  }
+      button.loading .btn-label {
+        opacity: 0.7;
+      }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
+      button.loading {
+        cursor: wait;
+      }
 
-</style>
-
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
     <div class="page">
@@ -330,14 +328,13 @@ HTML_TEMPLATE = """
               placeholder="Copy the chat and paste it here, starting from the first message.">{{ thread or "" }}</textarea>
           </div>
 
-        <div class="button-row">
-  <button type="submit" id="submit-btn">
-    <span class="btn-label">Decode the vibe</span>
-    <span class="btn-spinner" aria-hidden="true"></span>
-  </button>
-  <div class="button-caption">You get a short breakdown of what his messages likely meant, without the spiral.</div>
-</div>
-
+          <div class="button-row">
+            <button type="submit" id="submit-btn">
+              <span class="btn-label">Decode the vibe</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+            <div class="button-caption">You get a short breakdown of what his messages likely meant, without the spiral.</div>
+          </div>
         </form>
 
         {% if result %}
@@ -347,23 +344,24 @@ HTML_TEMPLATE = """
         {% endif %}
       </div>
     </div>
+
     <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    var form = document.getElementById("analyze-form");
-    var button = document.getElementById("submit-btn");
-    var label = button ? button.querySelector(".btn-label") : null;
+      document.addEventListener("DOMContentLoaded", function () {
+        var form = document.getElementById("analyze-form");
+        var button = document.getElementById("submit-btn");
+        var label = button ? button.querySelector(".btn-label") : null;
 
-    if (!form || !button || !label) return;
+        if (!form || !button || !label) return;
 
-    form.addEventListener("submit", function () {
-      if (button.classList.contains("loading")) return;
+        form.addEventListener("submit", function () {
+          if (button.classList.contains("loading")) return;
 
-      button.classList.add("loading");
-      button.disabled = true;
-      label.textContent = "Decoding...";
-    });
-  });
-</script>
+          button.classList.add("loading");
+          button.disabled = true;
+          label.textContent = "Decoding...";
+        });
+      });
+    </script>
   </body>
 </html>
 """
@@ -488,11 +486,11 @@ def index():
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
 
-    # Log anonymous usage data
-    logging.info(
-        f"[SUBMISSION] time={datetime.datetime.utcnow().isoformat()} "
-        f"images={bool(images)} text={bool(thread)} context_len={len(context)}"
-    )
+        # anonymous usage log
+        logging.info(
+            f"[SUBMISSION] time={datetime.datetime.utcnow().isoformat()} "
+            f"images={bool(images)} text={bool(thread)} context_len={len(context)}"
+        )
 
         if not API_KEY or client is None:
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
