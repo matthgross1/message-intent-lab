@@ -40,8 +40,8 @@ HTML_TEMPLATE = """
         margin: 0;
         padding: 0;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #050509;
-        color: #f9fafb;
+        background: #0F0F12;
+        color: #F5F5F5;
       }
 
       .page {
@@ -55,7 +55,7 @@ HTML_TEMPLATE = """
       .card {
         width: 100%;
         max-width: 640px;
-        background: #12121a;
+        background: #17171C;
         border-radius: 18px;
         padding: 28px 24px 32px;
         box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
@@ -66,7 +66,7 @@ HTML_TEMPLATE = """
         margin: 0 0 8px;
         font-size: 1.8rem;
         font-weight: 720;
-        color: #ffffff;
+        color: #F5F5F5;
         letter-spacing: -0.03em;
       }
 
@@ -74,13 +74,13 @@ HTML_TEMPLATE = """
         margin: 0 0 6px;
         font-size: 1.02rem;
         font-weight: 520;
-        color: #f3f4ff;
+        color: #F5F5F5;
       }
 
       .subline {
         margin: 0 0 22px;
         font-size: 0.92rem;
-        color: #d1d5db;
+        color: #B8B8B8;
       }
 
       .step-label {
@@ -89,7 +89,7 @@ HTML_TEMPLATE = """
         text-transform: uppercase;
         letter-spacing: 0.1em;
         margin-bottom: 4px;
-        color: #9ca3af;
+        color: #B8B8B8;
       }
 
       .field {
@@ -100,7 +100,7 @@ HTML_TEMPLATE = """
         font-size: 1rem;
         font-weight: 600;
         margin-bottom: 4px;
-        color: #f9fafb;
+        color: #F5F5F5;
       }
 
       textarea,
@@ -112,8 +112,8 @@ HTML_TEMPLATE = """
         border-radius: 10px;
         border: 1px solid #3f3f4c;
         outline: none;
-        background: #181822;
-        color: #f9fafb;
+        background: #17171C;
+        color: #F5F5F5;
         transition: border 0.15s ease, background 0.15s ease;
       }
 
@@ -124,27 +124,27 @@ HTML_TEMPLATE = """
 
       textarea:focus,
       input[type="file"]:focus {
-        border-color: #8b5cf6;
-        background: #1f1f2b;
+        border-color: #FF6F61;
+        background: #1C1C22;
       }
 
       textarea::placeholder {
-        color: #9ca3af;
+        color: #B8B8B8;
       }
 
       .hint {
         font-size: 0.8rem;
-        color: #d1d5db;
+        color: #B8B8B8;
         margin-top: 3px;
       }
 
       .error {
         padding: 10px 12px;
         border-radius: 10px;
-        background: rgba(248, 113, 113, 0.12);
-        color: #fecaca;
+        background: rgba(229, 83, 61, 0.15);
+        color: #F5F5F5;
         margin-bottom: 16px;
-        border: 1px solid rgba(248, 113, 113, 0.6);
+        border: 1px solid rgba(229, 83, 61, 0.7);
       }
 
       .button-row {
@@ -160,26 +160,27 @@ HTML_TEMPLATE = """
         font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
-        background: radial-gradient(circle at 20% 0, #a855f7, #6366f1);
-        color: #ffffff;
-        box-shadow: 0 10px 28px rgba(79, 70, 229, 0.6);
+        background: #FF6F61;
+        color: #0F0F12;
+        box-shadow: 0 10px 28px rgba(255, 111, 97, 0.45);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
 
       button[type="submit"]:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 36px rgba(79, 70, 229, 0.75);
+        background: #FF857A;
+        box-shadow: 0 14px 36px rgba(255, 111, 97, 0.6);
       }
 
       button[type="submit"]:active {
         transform: translateY(0);
-        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.65);
+        box-shadow: 0 6px 18px rgba(255, 111, 97, 0.45);
       }
 
       .button-caption {
         margin-top: 6px;
         font-size: 0.83rem;
-        color: #e5e7eb;
+        color: #B8B8B8;
       }
 
       .or-divider {
@@ -188,7 +189,7 @@ HTML_TEMPLATE = """
         gap: 10px;
         margin: 14px 0;
         font-size: 0.75rem;
-        color: #9ca3af;
+        color: #B8B8B8;
         text-transform: uppercase;
         letter-spacing: 0.15em;
       }
@@ -196,7 +197,7 @@ HTML_TEMPLATE = """
       .or-divider span {
         flex: 1;
         height: 1px;
-        background: #27272f;
+        background: #2A2A32;
       }
 
       /* Result card */
@@ -204,18 +205,18 @@ HTML_TEMPLATE = """
       .result {
         margin-top: 26px;
         padding: 20px 18px;
-        background: #181824;
+        background: #17171C;
         border: 1px solid #4b4b5b;
         border-radius: 20px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
-        color: #f9fafb;
+        color: #F5F5F5;
       }
 
       .quick-take {
         font-size: 1.05rem;
         font-weight: 660;
         margin-bottom: 12px;
-        color: #fefefe;
+        color: #F5F5F5;
       }
 
       .badges {
@@ -230,9 +231,9 @@ HTML_TEMPLATE = """
         border-radius: 999px;
         font-size: 0.75rem;
         font-weight: 600;
-        background: rgba(59, 130, 246, 0.18);
-        border: 1px solid rgba(129, 140, 248, 0.8);
-        color: #e0e7ff;
+        background: #2A1F1E;
+        border: 1px solid rgba(255, 180, 172, 0.35);
+        color: #FFB4AC;
       }
 
       .result-header {
@@ -246,15 +247,15 @@ HTML_TEMPLATE = """
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.14em;
-        color: #9ca3af;
+        color: #B8B8B8;
       }
 
       .share-btn {
         padding: 4px 10px;
         border-radius: 999px;
         border: 1px solid #4b5563;
-        background: #111827;
-        color: #e5e7eb;
+        background: #17171C;
+        color: #F5F5F5;
         font-size: 0.78rem;
         font-weight: 600;
         cursor: pointer;
@@ -264,12 +265,12 @@ HTML_TEMPLATE = """
       }
 
       .share-btn:hover {
-        background: #1f2937;
-        border-color: #6b7280;
+        background: #1C1C22;
+        border-color: #7A7A84;
       }
 
       .share-btn:active {
-        background: #030712;
+        background: #0F0F12;
       }
 
       .result-body {
@@ -285,7 +286,7 @@ HTML_TEMPLATE = """
         font-size: 0.82rem;
         text-transform: uppercase;
         letter-spacing: 0.11em;
-        color: #9ca3af;
+        color: #B8B8B8;
       }
 
       .section ul {
@@ -295,12 +296,12 @@ HTML_TEMPLATE = """
 
       .section li {
         margin-bottom: 4px;
-        color: #e5e7eb;
+        color: #F5F5F5;
       }
 
       .section p {
         margin: 4px 0;
-        color: #e5e7eb;
+        color: #B8B8B8;
         line-height: 1.35;
       }
 
@@ -311,8 +312,8 @@ HTML_TEMPLATE = """
         width: 14px;
         height: 14px;
         border-radius: 999px;
-        border: 2px solid rgba(249, 250, 251, 0.4);
-        border-top-color: #ffffff;
+        border: 2px solid rgba(245, 245, 245, 0.4);
+        border-top-color: #F5F5F5;
         margin-left: 8px;
         animation: spin 0.7s linear infinite;
       }
