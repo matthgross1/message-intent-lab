@@ -3,13 +3,19 @@ import datetime as dt
 import logging
 import os
 import re
+import sqlite3
+import uuid
 
-from flask import Flask, render_template_string, request
+from flask import Flask, jsonify, make_response, render_template_string, request
 from openai import OpenAI
 
 APP_NAME = "Message Intent Lab"
 TAGLINE = "Trying to figure out if he is ghosting or just bad at texting? I will decode it."
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+DB_PATH = os.path.join(os.path.dirname(__file__), "mil.db")
+COOKIE_NAME = "mil_uid"
+COOKIE_MAX_AGE = 31536000
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -507,15 +513,105 @@ Guidelines:
 """
 
 
-def log_submission(has_images, has_text, context_len):
-    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
-    logger.info(
-        "[SUBMISSION] time=%s has_images=%s has_text=%s context_len=%s",
-        timestamp,
-        has_images,
-        has_text,
-        context_len,
-    )
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    try:
+        with get_db_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    free_uses_today INTEGER NOT NULL DEFAULT 0,
+                    free_uses_date TEXT,
+                    total_decodes INTEGER NOT NULL DEFAULT 0,
+                    last_decode_at TEXT,
+                    is_paid INTEGER NOT NULL DEFAULT 0,
+                    followup_credits INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            conn.commit()
+    except Exception:
+        logger.exception("Database init failed")
+
+
+def get_or_create_user_id(req):
+    cookie_value = req.cookies.get(COOKIE_NAME)
+    if cookie_value:
+        return cookie_value, False
+    return str(uuid.uuid4()), True
+
+
+def load_or_create_user(user_id):
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            if row:
+                return row
+            created_at = dt.datetime.now(dt.timezone.utc).isoformat()
+            conn.execute(
+                """
+                INSERT INTO users (id, created_at, free_uses_today, free_uses_date, total_decodes, last_decode_at, is_paid, followup_credits)
+                VALUES (?, ?, 0, ?, 0, NULL, 0, 0)
+                """,
+                (user_id, created_at, created_at[:10]),
+            )
+            conn.commit()
+            return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    except Exception:
+        logger.exception("Database load/create failed")
+        return None
+
+
+def reset_daily_counter_if_needed(user_row):
+    if not user_row:
+        return False
+    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    if user_row["free_uses_date"] == today:
+        return False
+    try:
+        with get_db_connection() as conn:
+            conn.execute(
+                "UPDATE users SET free_uses_today = 0, free_uses_date = ? WHERE id = ?",
+                (today, user_row["id"]),
+            )
+            conn.commit()
+        return True
+    except Exception:
+        logger.exception("Failed to reset daily counter")
+        return False
+
+
+def increment_usage(user_row):
+    if not user_row:
+        return False
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    today = now[:10]
+    free_increment = 0 if user_row["is_paid"] else 1
+    try:
+        with get_db_connection() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET free_uses_today = free_uses_today + ?,
+                    free_uses_date = ?,
+                    total_decodes = total_decodes + 1,
+                    last_decode_at = ?
+                WHERE id = ?
+                """,
+                (free_increment, today, now, user_row["id"]),
+            )
+            conn.commit()
+        return True
+    except Exception:
+        logger.exception("Failed to increment usage")
+        return False
 
 
 def strip_disallowed_html(raw_html):
@@ -583,23 +679,81 @@ def build_analysis_input(context, conversation_text):
     )
 
 
+@app.route("/_admin/usage")
+def admin_usage():
+    if not ADMIN_TOKEN:
+        return ("Not Found", 404)
+
+    token = request.args.get("token", "")
+    if token != ADMIN_TOKEN:
+        return ("Forbidden", 403)
+
+    try:
+        with get_db_connection() as conn:
+            totals = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS users,
+                    COALESCE(SUM(total_decodes), 0) AS total_decodes,
+                    COALESCE(SUM(free_uses_today), 0) AS free_uses_today
+                FROM users
+                """
+            ).fetchone()
+
+        return jsonify(
+            users=totals["users"],
+            total_decodes=totals["total_decodes"],
+            free_uses_today=totals["free_uses_today"],
+        )
+    except Exception:
+        logger.exception("Admin usage lookup failed")
+        return ("Server error", 500)
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
     error = None
     context = ""
     thread = ""
+    limit_blocked = False
+    user_id, needs_cookie = get_or_create_user_id(request)
 
     if request.method == "POST":
         context = request.form.get("context", "").strip()
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
 
-        log_submission(bool(images), bool(thread), len(context))
-
-        if not API_KEY or client is None:
-            error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
+        user_row = load_or_create_user(user_id)
+        if not user_row:
+            error = "We hit a server issue. Please try again in a moment."
+            limit_blocked = True
         else:
+            reset_daily_counter_if_needed(user_row)
+            user_row = load_or_create_user(user_id)
+
+            if not user_row:
+                error = "We hit a server issue. Please try again in a moment."
+                limit_blocked = True
+            else:
+                if user_row["is_paid"] == 0 and user_row["free_uses_today"] >= 2:
+                    error = "You have used your free reads for today. Come back tomorrow."
+                    limit_blocked = True
+
+        timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+        logger.info(
+            "[SUBMISSION] time=%s user_id=%s has_images=%s has_text=%s context_len=%s blocked=%s",
+            timestamp,
+            user_id,
+            bool(images),
+            bool(thread),
+            len(context),
+            limit_blocked,
+        )
+
+        if not error and (not API_KEY or client is None):
+            error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
+        elif not error:
             ocr_text = extract_text_from_images(images) if images else ""
 
             if images and not ocr_text and not thread:
@@ -623,11 +777,13 @@ def index():
                         )
                         raw_html = completion.choices[0].message.content
                         result = strip_disallowed_html(raw_html)
+                        increment_usage(user_row)
                     except Exception:
                         logger.exception("OpenAI analysis failed")
                         error = "Something went wrong while analyzing the conversation."
 
-    return render_template_string(
+    response = make_response(
+        render_template_string(
         HTML_TEMPLATE,
         app_name=APP_NAME,
         tagline=TAGLINE,
@@ -635,11 +791,26 @@ def index():
         error=error,
         context=context,
         thread=thread,
+        )
     )
+    if needs_cookie:
+        response.set_cookie(
+            COOKIE_NAME,
+            user_id,
+            max_age=COOKIE_MAX_AGE,
+            httponly=True,
+            secure=True,
+            samesite="Lax",
+        )
+    return response
 
 
 # Premium features will be added here later.
 
 if __name__ == "__main__":
+    init_db()
     port = int(os.getenv("PORT", "8000"))
     app.run(host="0.0.0.0", port=port)
+
+
+init_db()
