@@ -153,6 +153,67 @@ HTML_TEMPLATE = """
         border: 1px solid rgba(229, 83, 61, 0.7);
       }
 
+      .limit-panel {
+        margin: 18px 0 20px;
+        padding: 16px 16px 18px;
+        border-radius: 16px;
+        background: linear-gradient(160deg, rgba(255, 111, 97, 0.12), rgba(23, 23, 28, 0.95));
+        border: 1px solid rgba(255, 111, 97, 0.35);
+        box-shadow: 0 12px 28px rgba(255, 111, 97, 0.2);
+      }
+
+      .limit-title {
+        margin: 0 0 6px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #F5F5F5;
+      }
+
+      .limit-sub {
+        margin: 0 0 12px;
+        font-size: 0.92rem;
+        color: #B8B8B8;
+      }
+
+      .limit-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .limit-btn {
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-family: inherit;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .limit-btn.primary {
+        background: #FF6F61;
+        color: #0F0F12;
+        border-color: rgba(255, 111, 97, 0.8);
+      }
+
+      .limit-btn.primary:hover {
+        background: #FF857A;
+      }
+
+      .limit-btn.secondary {
+        background: #17171C;
+        color: #F5F5F5;
+        border-color: rgba(255, 180, 172, 0.4);
+      }
+
+      .limit-footer {
+        margin: 0;
+        font-size: 0.82rem;
+        color: #B8B8B8;
+      }
+
       .button-row {
         margin-top: 12px;
         text-align: center;
@@ -354,6 +415,18 @@ HTML_TEMPLATE = """
           <div class="error"><strong>Whoops.</strong> {{ error }}</div>
         {% endif %}
 
+        {% if limit_reached %}
+          <div class="limit-panel">
+            <h2 class="limit-title">Those are your free reads for today</h2>
+            <p class="limit-sub">Come back tomorrow for more. Your next decode resets automatically.</p>
+            <div class="limit-actions">
+              <button type="button" class="limit-btn primary" id="limit-refresh-btn">Come back tomorrow</button>
+              <button type="button" class="limit-btn secondary" id="limit-share-btn">Share this app</button>
+            </div>
+            <p class="limit-footer">Overthinking responsibly.</p>
+          </div>
+        {% endif %}
+
         <form id="analyze-form" method="POST" enctype="multipart/form-data">
           <div class="field">
             <div class="step-label">Step 1</div>
@@ -385,7 +458,7 @@ HTML_TEMPLATE = """
           </div>
 
           <div class="button-row">
-            <button type="submit" id="submit-btn">
+            <button type="submit" id="submit-btn" {% if limit_reached %}disabled{% endif %}>
               <span class="btn-label">Decode the vibe</span>
               <span class="btn-spinner" aria-hidden="true"></span>
             </button>
@@ -424,27 +497,41 @@ HTML_TEMPLATE = """
       });
     }
 
+    async function shareApp() {
+      const baseUrl = window.location.href.split("?")[0];
+      const shareText = "Here is the vibe read I got from Message Intent Lab:";
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: "Message Intent Lab",
+            text: shareText,
+            url: baseUrl
+          });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(baseUrl);
+          alert("Link copied. Paste it in your group chat.");
+        } else {
+          alert("Sharing is not supported in this browser. You can still screenshot this.");
+        }
+      } catch (e) {
+        console.error("Share failed:", e);
+      }
+    }
+
     var shareBtn = document.getElementById("share-btn");
     if (shareBtn) {
-      shareBtn.addEventListener("click", async function () {
-        const baseUrl = window.location.href.split("?")[0];
-        const shareText = "Here is the vibe read I got from Message Intent Lab:";
-        try {
-          if (navigator.share) {
-            await navigator.share({
-              title: "Message Intent Lab",
-              text: shareText,
-              url: baseUrl
-            });
-          } else if (navigator.clipboard) {
-            await navigator.clipboard.writeText(baseUrl);
-            alert("Link copied. Paste it in your group chat.");
-          } else {
-            alert("Sharing is not supported in this browser. You can still screenshot this.");
-          }
-        } catch (e) {
-          console.error("Share failed:", e);
-        }
+      shareBtn.addEventListener("click", shareApp);
+    }
+
+    var limitShareBtn = document.getElementById("limit-share-btn");
+    if (limitShareBtn) {
+      limitShareBtn.addEventListener("click", shareApp);
+    }
+
+    var limitRefreshBtn = document.getElementById("limit-refresh-btn");
+    if (limitRefreshBtn) {
+      limitRefreshBtn.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: "smooth" });
       });
     }
   });
@@ -717,6 +804,7 @@ def index():
     context = ""
     thread = ""
     limit_blocked = False
+    limit_reached = False
     user_id, needs_cookie = get_or_create_user_id(request)
 
     if request.method == "POST":
@@ -737,8 +825,8 @@ def index():
                 limit_blocked = True
             else:
                 if user_row["is_paid"] == 0 and user_row["free_uses_today"] >= 2:
-                    error = "You have used your free reads for today. Come back tomorrow."
                     limit_blocked = True
+                    limit_reached = True
 
         timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
         logger.info(
@@ -751,9 +839,9 @@ def index():
             limit_blocked,
         )
 
-        if not error and (not API_KEY or client is None):
+        if not error and not limit_reached and (not API_KEY or client is None):
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
-        elif not error:
+        elif not error and not limit_reached:
             ocr_text = extract_text_from_images(images) if images else ""
 
             if images and not ocr_text and not thread:
@@ -789,6 +877,7 @@ def index():
         tagline=TAGLINE,
         result=result,
         error=error,
+        limit_reached=limit_reached,
         context=context,
         thread=thread,
         )
@@ -806,6 +895,8 @@ def index():
 
 
 # Premium features will be added here later.
+# Limit panel is rendered in the main template when limit_reached is True,
+# which is set in the index route when the daily free limit is hit.
 
 if __name__ == "__main__":
     init_db()
