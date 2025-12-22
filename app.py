@@ -1,13 +1,21 @@
-import os
 import base64
+import datetime as dt
 import logging
-import datetime
+import os
+import re
+
 from flask import Flask, render_template_string, request
 from openai import OpenAI
 
+APP_NAME = "Message Intent Lab"
+TAGLINE = "Trying to figure out if he is ghosting or just bad at texting? I will decode it."
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=API_KEY) if API_KEY else None
@@ -226,47 +234,47 @@ HTML_TEMPLATE = """
         border: 1px solid rgba(129, 140, 248, 0.8);
         color: #e0e7ff;
       }
-        .result-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-  }
 
-  .result-label {
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: #9ca3af;
-  }
+      .result-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
 
-  .share-btn {
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid #4b5563;
-    background: #111827;
-    color: #e5e7eb;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
+      .result-label {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: #9ca3af;
+      }
 
-  .share-btn:hover {
-    background: #1f2937;
-    border-color: #6b7280;
-  }
+      .share-btn {
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #4b5563;
+        background: #111827;
+        color: #e5e7eb;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
 
-  .share-btn:active {
-    background: #030712;
-  }
+      .share-btn:hover {
+        background: #1f2937;
+        border-color: #6b7280;
+      }
 
-  .result-body {
-    margin-top: 4px;
-  }
+      .share-btn:active {
+        background: #030712;
+      }
 
+      .result-body {
+        margin-top: 4px;
+      }
 
       .section {
         margin-top: 12px;
@@ -331,8 +339,8 @@ HTML_TEMPLATE = """
   <body>
     <div class="page">
       <div class="card">
-        <h1>Message Intent Lab</h1>
-        <p class="tagline">Trying to figure out if he is ghosting or just bad at texting? I will decode it.</p>
+        <h1>{{ app_name }}</h1>
+        <p class="tagline">{{ tagline }}</p>
         <p class="subline">When someone texts weird and your brain will not shut up about it. Upload screenshots and get a plain English read on what he was probably trying to do.</p>
 
         {% if error %}
@@ -439,7 +447,14 @@ HTML_TEMPLATE = """
 </html>
 """
 
-SYSTEM_PROMPT = """
+OCR_SYSTEM_PROMPT = (
+    "You are an OCR engine. Extract only the visible text from this screenshot "
+    "of a messaging conversation. Do not add explanation, labels, or commentary."
+)
+
+OCR_USER_PROMPT = "Extract the raw text exactly as it appears in the chat bubble order."
+
+ANALYSIS_SYSTEM_PROMPT = """
 You are a behavioral scientist specializing in mixed signals in dating and friendships.
 
 The user will share a text message conversation and a bit of context. Assume the user is the blue bubble unless they say otherwise.
@@ -452,6 +467,7 @@ CRITICAL RULES:
 - Total output should usually stay under 200 words.
 - Bullets should be short and direct (about 15 words or less).
 - Tone: clear, honest, a little blunt, not clinical, not self help.
+- Do not include <script> tags, <style> tags, or external links.
 
 Return valid HTML that fits exactly this structure:
 
@@ -489,11 +505,29 @@ Guidelines:
 - Your entire job is to decode what the other person was probably trying to signal.
 """
 
+
+def log_submission(has_images, has_text, context_len):
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+    logger.info(
+        "[SUBMISSION] time=%s has_images=%s has_text=%s context_len=%s",
+        timestamp,
+        has_images,
+        has_text,
+        context_len,
+    )
+
+
+def strip_disallowed_html(raw_html):
+    if not raw_html:
+        return raw_html
+
+    sanitized = re.sub(r"<script[^>]*>.*?</script>", "", raw_html, flags=re.DOTALL | re.IGNORECASE)
+    sanitized = re.sub(r"<style[^>]*>.*?</style>", "", sanitized, flags=re.DOTALL | re.IGNORECASE)
+    sanitized = re.sub(r"<link[^>]*?>", "", sanitized, flags=re.DOTALL | re.IGNORECASE)
+    return sanitized.strip()
+
+
 def extract_text_from_images(files):
-    """
-    Take a list of uploaded image files and use the vision model
-    to extract raw text from screenshots of chats.
-    """
     if not files:
         return ""
 
@@ -513,25 +547,19 @@ def extract_text_from_images(files):
             resp = client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an OCR engine. Extract only the visible text from this screenshot of a messaging conversation. Do not add explanation, labels, or commentary."
-                    },
+                    {"role": "system", "content": OCR_SYSTEM_PROMPT},
                     {
                         "role": "user",
                         "content": [
-                            {
-                                "type": "text",
-                                "text": "Extract the raw text exactly as it appears in the chat bubble order."
-                            },
+                            {"type": "text", "text": OCR_USER_PROMPT},
                             {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{b64}"
-                                }
-                            }
-                        ]
-                    }
+                                },
+                            },
+                        ],
+                    },
                 ],
                 temperature=0.0,
             )
@@ -540,11 +568,18 @@ def extract_text_from_images(files):
             if text_chunk:
                 all_text.append(text_chunk)
 
-        except Exception as e:
-            print("Error during OCR for an image:", repr(e))
-            # skip bad image, continue with others
+        except Exception:
+            logger.exception("OCR failed for an uploaded image")
 
     return "\n\n".join(all_text).strip()
+
+
+def build_analysis_input(context, conversation_text):
+    return (
+        f"Context: {context or 'none provided'}\n\n"
+        "Text conversation (from screenshots and/or pasted text):\n"
+        f"{conversation_text}"
+    )
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -559,47 +594,42 @@ def index():
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
 
-        # anonymous usage log
-        logging.info(
-            f"[SUBMISSION] time={datetime.datetime.utcnow().isoformat()} "
-            f"images={bool(images)} text={bool(thread)} context_len={len(context)}"
-        )
+        log_submission(bool(images), bool(thread), len(context))
 
         if not API_KEY or client is None:
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
         else:
-            ocr_text = ""
-            if images:
-                ocr_text = extract_text_from_images(images)
+            ocr_text = extract_text_from_images(images) if images else ""
 
-            conversation_text = ocr_text or thread
-
-            if not conversation_text:
-                error = "Please upload at least one screenshot or paste the conversation text."
+            if images and not ocr_text and not thread:
+                error = "We could not read text from those screenshots. Try a clearer crop or paste the text instead."
             else:
-                user_input = f"""
-Context: {context or "none provided"}
+                conversation_text = ocr_text or thread
 
-Text conversation (from screenshots and/or pasted text):
-{conversation_text}
-""".strip()
+                if not conversation_text:
+                    error = "Please upload at least one screenshot or paste the conversation text."
+                else:
+                    user_input = build_analysis_input(context, conversation_text)
 
-                try:
-                    completion = client.chat.completions.create(
-                        model="gpt-4.1-mini",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": user_input}
-                        ],
-                        temperature=0.4,
-                    )
-                    result = completion.choices[0].message.content
-                except Exception as e:
-                    print("Error calling OpenAI for intent analysis:", repr(e))
-                    error = "Something went wrong while analyzing the conversation."
+                    try:
+                        completion = client.chat.completions.create(
+                            model="gpt-4.1-mini",
+                            messages=[
+                                {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
+                                {"role": "user", "content": user_input},
+                            ],
+                            temperature=0.4,
+                        )
+                        raw_html = completion.choices[0].message.content
+                        result = strip_disallowed_html(raw_html)
+                    except Exception:
+                        logger.exception("OpenAI analysis failed")
+                        error = "Something went wrong while analyzing the conversation."
 
     return render_template_string(
         HTML_TEMPLATE,
+        app_name=APP_NAME,
+        tagline=TAGLINE,
         result=result,
         error=error,
         context=context,
@@ -607,5 +637,8 @@ Text conversation (from screenshots and/or pasted text):
     )
 
 
+# Premium features will be added here later.
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", "8000"))
+    app.run(host="0.0.0.0", port=port)
