@@ -8,6 +8,7 @@ import uuid
 
 from flask import Flask, jsonify, make_response, render_template_string, request
 from openai import OpenAI
+import stripe
 
 APP_NAME = "Message Intent Lab"
 TAGLINE = "Trying to figure out if he is ghosting or just bad at texting? I will decode it."
@@ -16,6 +17,11 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "mil.db")
 COOKIE_NAME = "mil_uid"
 COOKIE_MAX_AGE = 31536000
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_PRICE_DECODE_10 = os.getenv("STRIPE_PRICE_DECODE_10")
+STRIPE_PRICE_DECODE_25 = os.getenv("STRIPE_PRICE_DECODE_25")
+STRIPE_PRICE_DECODE_50 = os.getenv("STRIPE_PRICE_DECODE_50")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +31,9 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=API_KEY) if API_KEY else None
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 HTML_TEMPLATE = """
 <!doctype html>
@@ -208,10 +217,24 @@ HTML_TEMPLATE = """
         border-color: rgba(255, 180, 172, 0.4);
       }
 
+      .limit-btn.secondary.loading {
+        opacity: 0.7;
+        cursor: wait;
+      }
+
       .limit-footer {
         margin: 0;
         font-size: 0.82rem;
         color: #B8B8B8;
+      }
+
+      .banner {
+        padding: 10px 12px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+        border: 1px solid rgba(255, 180, 172, 0.3);
+        background: rgba(255, 111, 97, 0.12);
+        color: #F5F5F5;
       }
 
       .button-row {
@@ -415,6 +438,10 @@ HTML_TEMPLATE = """
           <div class="error"><strong>Whoops.</strong> {{ error }}</div>
         {% endif %}
 
+        {% if banner %}
+          <div class="banner">{{ banner }}</div>
+        {% endif %}
+
         {% if limit_reached %}
           <div class="limit-panel">
             <h2 class="limit-title">Those are your free reads for today</h2>
@@ -422,7 +449,15 @@ HTML_TEMPLATE = """
             <div class="limit-actions">
               <button type="button" class="limit-btn primary" id="limit-refresh-btn">Come back tomorrow</button>
               <button type="button" class="limit-btn secondary" id="limit-share-btn">Share this app</button>
+              {% if stripe_enabled %}
+                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="10">Get 10 more decodes</button>
+                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="25">Get 25 more decodes</button>
+                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="50">Get 50 more decodes</button>
+              {% endif %}
             </div>
+            {% if not stripe_enabled %}
+              <p class="limit-sub">Paid packs are coming soon.</p>
+            {% endif %}
             <p class="limit-footer">Overthinking responsibly.</p>
           </div>
         {% endif %}
@@ -534,6 +569,39 @@ HTML_TEMPLATE = """
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
     }
+
+    var packButtons = document.querySelectorAll(".js-pack-btn");
+    if (packButtons.length) {
+      packButtons.forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          if (btn.classList.contains("loading")) return;
+          btn.classList.add("loading");
+          var originalLabel = btn.textContent;
+          btn.textContent = "Redirecting...";
+          try {
+            const response = await fetch("/create-checkout-session/decode-pack", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pack: btn.dataset.pack })
+            });
+            if (!response.ok) {
+              throw new Error("Checkout failed");
+            }
+            const data = await response.json();
+            if (data.url) {
+              window.location.href = data.url;
+            } else {
+              throw new Error("Missing checkout URL");
+            }
+          } catch (e) {
+            console.error("Checkout error:", e);
+            alert("Checkout could not start. Please try again in a moment.");
+            btn.classList.remove("loading");
+            btn.textContent = originalLabel;
+          }
+        });
+      });
+    }
   });
 </script>
 
@@ -619,13 +687,32 @@ def init_db():
                     total_decodes INTEGER NOT NULL DEFAULT 0,
                     last_decode_at TEXT,
                     is_paid INTEGER NOT NULL DEFAULT 0,
-                    followup_credits INTEGER NOT NULL DEFAULT 0
+                    followup_credits INTEGER NOT NULL DEFAULT 0,
+                    paid_decode_credits INTEGER NOT NULL DEFAULT 0,
+                    lifetime_paid_decodes INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
             conn.commit()
+            migrate_db(conn)
     except Exception:
         logger.exception("Database init failed")
+
+
+def migrate_db(conn):
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    additions = []
+    if "paid_decode_credits" not in columns:
+        additions.append("ALTER TABLE users ADD COLUMN paid_decode_credits INTEGER NOT NULL DEFAULT 0")
+    if "lifetime_paid_decodes" not in columns:
+        additions.append("ALTER TABLE users ADD COLUMN lifetime_paid_decodes INTEGER NOT NULL DEFAULT 0")
+    for statement in additions:
+        try:
+            conn.execute(statement)
+        except Exception:
+            logger.exception("Database migration failed")
+    if additions:
+        conn.commit()
 
 
 def get_or_create_user_id(req):
@@ -644,8 +731,12 @@ def load_or_create_user(user_id):
             created_at = dt.datetime.now(dt.timezone.utc).isoformat()
             conn.execute(
                 """
-                INSERT INTO users (id, created_at, free_uses_today, free_uses_date, total_decodes, last_decode_at, is_paid, followup_credits)
-                VALUES (?, ?, 0, ?, 0, NULL, 0, 0)
+                INSERT INTO users (
+                    id, created_at, free_uses_today, free_uses_date,
+                    total_decodes, last_decode_at, is_paid, followup_credits,
+                    paid_decode_credits, lifetime_paid_decodes
+                )
+                VALUES (?, ?, 0, ?, 0, NULL, 0, 0, 0, 0)
                 """,
                 (user_id, created_at, created_at[:10]),
             )
@@ -680,7 +771,6 @@ def increment_usage(user_row):
         return False
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     today = now[:10]
-    free_increment = 0 if user_row["is_paid"] else 1
     try:
         with get_db_connection() as conn:
             conn.execute(
@@ -692,13 +782,49 @@ def increment_usage(user_row):
                     last_decode_at = ?
                 WHERE id = ?
                 """,
-                (free_increment, today, now, user_row["id"]),
+                (1, today, now, user_row["id"]),
             )
             conn.commit()
         return True
     except Exception:
         logger.exception("Failed to increment usage")
         return False
+
+
+def increment_usage_paid(user_row):
+    if not user_row:
+        return False
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    today = now[:10]
+    try:
+        with get_db_connection() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET paid_decode_credits = paid_decode_credits - 1,
+                    lifetime_paid_decodes = lifetime_paid_decodes + 1,
+                    free_uses_date = ?,
+                    total_decodes = total_decodes + 1,
+                    last_decode_at = ?
+                WHERE id = ? AND paid_decode_credits > 0
+                """,
+                (today, now, user_row["id"]),
+            )
+            conn.commit()
+        return True
+    except Exception:
+        logger.exception("Failed to decrement paid credits")
+        return False
+
+
+def stripe_enabled():
+    return bool(
+        STRIPE_SECRET_KEY
+        and STRIPE_WEBHOOK_SECRET
+        and STRIPE_PRICE_DECODE_10
+        and STRIPE_PRICE_DECODE_25
+        and STRIPE_PRICE_DECODE_50
+    )
 
 
 def strip_disallowed_html(raw_html):
@@ -797,6 +923,102 @@ def admin_usage():
         return ("Server error", 500)
 
 
+@app.route("/create-checkout-session/decode-pack", methods=["POST"])
+def create_checkout_session():
+    if not stripe_enabled():
+        return jsonify(error="Stripe is not configured"), 400
+
+    user_id, needs_cookie = get_or_create_user_id(request)
+    user_row = load_or_create_user(user_id)
+    if not user_row:
+        return jsonify(error="User unavailable"), 500
+    payload = request.get_json(silent=True) or {}
+    pack = str(payload.get("pack", "")).strip()
+    price_map = {
+        "10": STRIPE_PRICE_DECODE_10,
+        "25": STRIPE_PRICE_DECODE_25,
+        "50": STRIPE_PRICE_DECODE_50,
+    }
+    price_id = price_map.get(pack)
+    if not price_id:
+        return jsonify(error="Invalid pack"), 400
+
+    base_url = request.url_root.rstrip("/")
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{"price": price_id, "quantity": 1}],
+            client_reference_id=user_id,
+            metadata={"mil_uid": user_id, "pack_size": pack},
+            success_url=f"{base_url}/?checkout=success",
+            cancel_url=f"{base_url}/?checkout=cancel",
+        )
+        response = make_response(jsonify(url=session.url))
+        if needs_cookie:
+            response.set_cookie(
+                COOKIE_NAME,
+                user_id,
+                max_age=COOKIE_MAX_AGE,
+                httponly=True,
+                secure=True,
+                samesite="Lax",
+            )
+        return response
+    except Exception:
+        logger.exception("Stripe checkout session creation failed")
+        return jsonify(error="Stripe error"), 500
+
+
+@app.route("/stripe-webhook", methods=["POST"])
+def stripe_webhook():
+    if not STRIPE_WEBHOOK_SECRET:
+        return ("Webhook not configured", 400)
+
+    payload = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        logger.exception("Stripe webhook signature verification failed")
+        return ("Invalid signature", 400)
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        metadata = session.get("metadata", {}) or {}
+        user_id = metadata.get("mil_uid")
+        pack_size = metadata.get("pack_size")
+        try:
+            credits = int(pack_size)
+        except (TypeError, ValueError):
+            credits = 0
+
+        if user_id and credits > 0:
+            try:
+                with get_db_connection() as conn:
+                    conn.execute(
+                        """
+                        UPDATE users
+                        SET paid_decode_credits = paid_decode_credits + ?
+                        WHERE id = ?
+                        """,
+                        (credits, user_id),
+                    )
+                    conn.commit()
+                    row = conn.execute(
+                        "SELECT paid_decode_credits FROM users WHERE id = ?", (user_id,)
+                    ).fetchone()
+                logger.info(
+                    "[PAYMENT] user=%s pack=%s credits_now=%s",
+                    user_id,
+                    credits,
+                    row["paid_decode_credits"] if row else "unknown",
+                )
+            except Exception:
+                logger.exception("Failed to apply Stripe credits")
+
+    return ("OK", 200)
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
@@ -805,7 +1027,21 @@ def index():
     thread = ""
     limit_blocked = False
     limit_reached = False
+    banner = None
+    used_paid_credit = False
     user_id, needs_cookie = get_or_create_user_id(request)
+
+    if request.method == "GET":
+        checkout_state = request.args.get("checkout")
+        if checkout_state in {"success", "cancel"}:
+            user_row = load_or_create_user(user_id)
+            if checkout_state == "success":
+                if user_row:
+                    banner = f"Unlocked. You now have {user_row['paid_decode_credits']} decodes."
+                else:
+                    banner = "Unlocked. Your decodes will appear shortly."
+            elif checkout_state == "cancel":
+                banner = "Checkout canceled."
 
     if request.method == "POST":
         context = request.form.get("context", "").strip()
@@ -824,19 +1060,22 @@ def index():
                 error = "We hit a server issue. Please try again in a moment."
                 limit_blocked = True
             else:
-                if user_row["is_paid"] == 0 and user_row["free_uses_today"] >= 2:
+                if user_row["paid_decode_credits"] > 0:
+                    used_paid_credit = True
+                elif user_row["free_uses_today"] >= 2:
                     limit_blocked = True
                     limit_reached = True
 
         timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
         logger.info(
-            "[SUBMISSION] time=%s user_id=%s has_images=%s has_text=%s context_len=%s blocked=%s",
+            "[SUBMISSION] time=%s user_id=%s has_images=%s has_text=%s context_len=%s blocked=%s paid_path=%s",
             timestamp,
             user_id,
             bool(images),
             bool(thread),
             len(context),
             limit_blocked,
+            used_paid_credit,
         )
 
         if not error and not limit_reached and (not API_KEY or client is None):
@@ -865,7 +1104,10 @@ def index():
                         )
                         raw_html = completion.choices[0].message.content
                         result = strip_disallowed_html(raw_html)
-                        increment_usage(user_row)
+                        if used_paid_credit:
+                            increment_usage_paid(user_row)
+                        else:
+                            increment_usage(user_row)
                     except Exception:
                         logger.exception("OpenAI analysis failed")
                         error = "Something went wrong while analyzing the conversation."
@@ -878,6 +1120,8 @@ def index():
         result=result,
         error=error,
         limit_reached=limit_reached,
+        stripe_enabled=stripe_enabled(),
+        banner=banner,
         context=context,
         thread=thread,
         )
