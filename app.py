@@ -3,25 +3,13 @@ import datetime as dt
 import logging
 import os
 import re
-import sqlite3
-import uuid
 
-from flask import Flask, jsonify, make_response, render_template_string, request
+from flask import Flask, render_template_string, request
 from openai import OpenAI
-import stripe
 
 APP_NAME = "Message Intent Lab"
 TAGLINE = "Trying to figure out if he is ghosting or just bad at texting? I will decode it."
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
-DB_PATH = os.path.join(os.path.dirname(__file__), "mil.db")
-COOKIE_NAME = "mil_uid"
-COOKIE_MAX_AGE = 31536000
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-STRIPE_PRICE_DECODE_10 = os.getenv("STRIPE_PRICE_DECODE_10")
-STRIPE_PRICE_DECODE_25 = os.getenv("STRIPE_PRICE_DECODE_25")
-STRIPE_PRICE_DECODE_50 = os.getenv("STRIPE_PRICE_DECODE_50")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,9 +19,6 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=API_KEY) if API_KEY else None
-
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
 
 HTML_TEMPLATE = """
 <!doctype html>
@@ -55,8 +40,8 @@ HTML_TEMPLATE = """
         margin: 0;
         padding: 0;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #0F0F12;
-        color: #F5F5F5;
+        background: #050509;
+        color: #f9fafb;
       }
 
       .page {
@@ -70,7 +55,7 @@ HTML_TEMPLATE = """
       .card {
         width: 100%;
         max-width: 640px;
-        background: #17171C;
+        background: #12121a;
         border-radius: 18px;
         padding: 28px 24px 32px;
         box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
@@ -81,7 +66,7 @@ HTML_TEMPLATE = """
         margin: 0 0 8px;
         font-size: 1.8rem;
         font-weight: 720;
-        color: #F5F5F5;
+        color: #ffffff;
         letter-spacing: -0.03em;
       }
 
@@ -89,13 +74,13 @@ HTML_TEMPLATE = """
         margin: 0 0 6px;
         font-size: 1.02rem;
         font-weight: 520;
-        color: #F5F5F5;
+        color: #f3f4ff;
       }
 
       .subline {
         margin: 0 0 22px;
         font-size: 0.92rem;
-        color: #B8B8B8;
+        color: #d1d5db;
       }
 
       .step-label {
@@ -104,7 +89,7 @@ HTML_TEMPLATE = """
         text-transform: uppercase;
         letter-spacing: 0.1em;
         margin-bottom: 4px;
-        color: #B8B8B8;
+        color: #9ca3af;
       }
 
       .field {
@@ -115,7 +100,7 @@ HTML_TEMPLATE = """
         font-size: 1rem;
         font-weight: 600;
         margin-bottom: 4px;
-        color: #F5F5F5;
+        color: #f9fafb;
       }
 
       textarea,
@@ -127,8 +112,8 @@ HTML_TEMPLATE = """
         border-radius: 10px;
         border: 1px solid #3f3f4c;
         outline: none;
-        background: #17171C;
-        color: #F5F5F5;
+        background: #181822;
+        color: #f9fafb;
         transition: border 0.15s ease, background 0.15s ease;
       }
 
@@ -139,102 +124,27 @@ HTML_TEMPLATE = """
 
       textarea:focus,
       input[type="file"]:focus {
-        border-color: #FF6F61;
-        background: #1C1C22;
+        border-color: #8b5cf6;
+        background: #1f1f2b;
       }
 
       textarea::placeholder {
-        color: #B8B8B8;
+        color: #9ca3af;
       }
 
       .hint {
         font-size: 0.8rem;
-        color: #B8B8B8;
+        color: #d1d5db;
         margin-top: 3px;
       }
 
       .error {
         padding: 10px 12px;
         border-radius: 10px;
-        background: rgba(229, 83, 61, 0.15);
-        color: #F5F5F5;
+        background: rgba(248, 113, 113, 0.12);
+        color: #fecaca;
         margin-bottom: 16px;
-        border: 1px solid rgba(229, 83, 61, 0.7);
-      }
-
-      .limit-panel {
-        margin: 18px 0 20px;
-        padding: 16px 16px 18px;
-        border-radius: 16px;
-        background: linear-gradient(160deg, rgba(255, 111, 97, 0.12), rgba(23, 23, 28, 0.95));
-        border: 1px solid rgba(255, 111, 97, 0.35);
-        box-shadow: 0 12px 28px rgba(255, 111, 97, 0.2);
-      }
-
-      .limit-title {
-        margin: 0 0 6px;
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #F5F5F5;
-      }
-
-      .limit-sub {
-        margin: 0 0 12px;
-        font-size: 0.92rem;
-        color: #B8B8B8;
-      }
-
-      .limit-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      .limit-btn {
-        padding: 8px 14px;
-        border-radius: 999px;
-        border: 1px solid transparent;
-        font-family: inherit;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-      }
-
-      .limit-btn.primary {
-        background: #FF6F61;
-        color: #0F0F12;
-        border-color: rgba(255, 111, 97, 0.8);
-      }
-
-      .limit-btn.primary:hover {
-        background: #FF857A;
-      }
-
-      .limit-btn.secondary {
-        background: #17171C;
-        color: #F5F5F5;
-        border-color: rgba(255, 180, 172, 0.4);
-      }
-
-      .limit-btn.secondary.loading {
-        opacity: 0.7;
-        cursor: wait;
-      }
-
-      .limit-footer {
-        margin: 0;
-        font-size: 0.82rem;
-        color: #B8B8B8;
-      }
-
-      .banner {
-        padding: 10px 12px;
-        border-radius: 10px;
-        margin-bottom: 16px;
-        border: 1px solid rgba(255, 180, 172, 0.3);
-        background: rgba(255, 111, 97, 0.12);
-        color: #F5F5F5;
+        border: 1px solid rgba(248, 113, 113, 0.6);
       }
 
       .button-row {
@@ -250,27 +160,26 @@ HTML_TEMPLATE = """
         font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
-        background: #FF6F61;
-        color: #0F0F12;
-        box-shadow: 0 10px 28px rgba(255, 111, 97, 0.45);
+        background: radial-gradient(circle at 20% 0, #a855f7, #6366f1);
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(79, 70, 229, 0.6);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
 
       button[type="submit"]:hover {
         transform: translateY(-2px);
-        background: #FF857A;
-        box-shadow: 0 14px 36px rgba(255, 111, 97, 0.6);
+        box-shadow: 0 14px 36px rgba(79, 70, 229, 0.75);
       }
 
       button[type="submit"]:active {
         transform: translateY(0);
-        box-shadow: 0 6px 18px rgba(255, 111, 97, 0.45);
+        box-shadow: 0 6px 18px rgba(79, 70, 229, 0.65);
       }
 
       .button-caption {
         margin-top: 6px;
         font-size: 0.83rem;
-        color: #B8B8B8;
+        color: #e5e7eb;
       }
 
       .or-divider {
@@ -279,7 +188,7 @@ HTML_TEMPLATE = """
         gap: 10px;
         margin: 14px 0;
         font-size: 0.75rem;
-        color: #B8B8B8;
+        color: #9ca3af;
         text-transform: uppercase;
         letter-spacing: 0.15em;
       }
@@ -287,7 +196,7 @@ HTML_TEMPLATE = """
       .or-divider span {
         flex: 1;
         height: 1px;
-        background: #2A2A32;
+        background: #27272f;
       }
 
       /* Result card */
@@ -295,18 +204,18 @@ HTML_TEMPLATE = """
       .result {
         margin-top: 26px;
         padding: 20px 18px;
-        background: #17171C;
+        background: #181824;
         border: 1px solid #4b4b5b;
         border-radius: 20px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
-        color: #F5F5F5;
+        color: #f9fafb;
       }
 
       .quick-take {
         font-size: 1.05rem;
         font-weight: 660;
         margin-bottom: 12px;
-        color: #F5F5F5;
+        color: #fefefe;
       }
 
       .badges {
@@ -321,9 +230,9 @@ HTML_TEMPLATE = """
         border-radius: 999px;
         font-size: 0.75rem;
         font-weight: 600;
-        background: #2A1F1E;
-        border: 1px solid rgba(255, 180, 172, 0.35);
-        color: #FFB4AC;
+        background: rgba(59, 130, 246, 0.18);
+        border: 1px solid rgba(129, 140, 248, 0.8);
+        color: #e0e7ff;
       }
 
       .result-header {
@@ -337,15 +246,15 @@ HTML_TEMPLATE = """
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.14em;
-        color: #B8B8B8;
+        color: #9ca3af;
       }
 
       .share-btn {
         padding: 4px 10px;
         border-radius: 999px;
         border: 1px solid #4b5563;
-        background: #17171C;
-        color: #F5F5F5;
+        background: #111827;
+        color: #e5e7eb;
         font-size: 0.78rem;
         font-weight: 600;
         cursor: pointer;
@@ -355,12 +264,12 @@ HTML_TEMPLATE = """
       }
 
       .share-btn:hover {
-        background: #1C1C22;
-        border-color: #7A7A84;
+        background: #1f2937;
+        border-color: #6b7280;
       }
 
       .share-btn:active {
-        background: #0F0F12;
+        background: #030712;
       }
 
       .result-body {
@@ -376,7 +285,7 @@ HTML_TEMPLATE = """
         font-size: 0.82rem;
         text-transform: uppercase;
         letter-spacing: 0.11em;
-        color: #B8B8B8;
+        color: #9ca3af;
       }
 
       .section ul {
@@ -386,12 +295,12 @@ HTML_TEMPLATE = """
 
       .section li {
         margin-bottom: 4px;
-        color: #F5F5F5;
+        color: #e5e7eb;
       }
 
       .section p {
         margin: 4px 0;
-        color: #B8B8B8;
+        color: #e5e7eb;
         line-height: 1.35;
       }
 
@@ -402,8 +311,8 @@ HTML_TEMPLATE = """
         width: 14px;
         height: 14px;
         border-radius: 999px;
-        border: 2px solid rgba(245, 245, 245, 0.4);
-        border-top-color: #F5F5F5;
+        border: 2px solid rgba(249, 250, 251, 0.4);
+        border-top-color: #ffffff;
         margin-left: 8px;
         animation: spin 0.7s linear infinite;
       }
@@ -438,30 +347,6 @@ HTML_TEMPLATE = """
           <div class="error"><strong>Whoops.</strong> {{ error }}</div>
         {% endif %}
 
-        {% if banner %}
-          <div class="banner">{{ banner }}</div>
-        {% endif %}
-
-        {% if limit_reached %}
-          <div class="limit-panel">
-            <h2 class="limit-title">Those are your free reads for today</h2>
-            <p class="limit-sub">Come back tomorrow for more. Your next decode resets automatically.</p>
-            <div class="limit-actions">
-              <button type="button" class="limit-btn primary" id="limit-refresh-btn">Come back tomorrow</button>
-              <button type="button" class="limit-btn secondary" id="limit-share-btn">Share this app</button>
-              {% if stripe_enabled %}
-                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="10">Get 10 more decodes</button>
-                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="25">Get 25 more decodes</button>
-                <button type="button" class="limit-btn secondary js-pack-btn" data-pack="50">Get 50 more decodes</button>
-              {% endif %}
-            </div>
-            {% if not stripe_enabled %}
-              <p class="limit-sub">Paid packs are coming soon.</p>
-            {% endif %}
-            <p class="limit-footer">Overthinking responsibly.</p>
-          </div>
-        {% endif %}
-
         <form id="analyze-form" method="POST" enctype="multipart/form-data">
           <div class="field">
             <div class="step-label">Step 1</div>
@@ -493,7 +378,7 @@ HTML_TEMPLATE = """
           </div>
 
           <div class="button-row">
-            <button type="submit" id="submit-btn" {% if limit_reached %}disabled{% endif %}>
+            <button type="submit" id="submit-btn">
               <span class="btn-label">Decode the vibe</span>
               <span class="btn-spinner" aria-hidden="true"></span>
             </button>
@@ -532,74 +417,27 @@ HTML_TEMPLATE = """
       });
     }
 
-    async function shareApp() {
-      const baseUrl = window.location.href.split("?")[0];
-      const shareText = "Here is the vibe read I got from Message Intent Lab:";
-      try {
-        if (navigator.share) {
-          await navigator.share({
-            title: "Message Intent Lab",
-            text: shareText,
-            url: baseUrl
-          });
-        } else if (navigator.clipboard) {
-          await navigator.clipboard.writeText(baseUrl);
-          alert("Link copied. Paste it in your group chat.");
-        } else {
-          alert("Sharing is not supported in this browser. You can still screenshot this.");
-        }
-      } catch (e) {
-        console.error("Share failed:", e);
-      }
-    }
-
     var shareBtn = document.getElementById("share-btn");
     if (shareBtn) {
-      shareBtn.addEventListener("click", shareApp);
-    }
-
-    var limitShareBtn = document.getElementById("limit-share-btn");
-    if (limitShareBtn) {
-      limitShareBtn.addEventListener("click", shareApp);
-    }
-
-    var limitRefreshBtn = document.getElementById("limit-refresh-btn");
-    if (limitRefreshBtn) {
-      limitRefreshBtn.addEventListener("click", function () {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
-    }
-
-    var packButtons = document.querySelectorAll(".js-pack-btn");
-    if (packButtons.length) {
-      packButtons.forEach(function (btn) {
-        btn.addEventListener("click", async function () {
-          if (btn.classList.contains("loading")) return;
-          btn.classList.add("loading");
-          var originalLabel = btn.textContent;
-          btn.textContent = "Redirecting...";
-          try {
-            const response = await fetch("/create-checkout-session/decode-pack", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ pack: btn.dataset.pack })
+      shareBtn.addEventListener("click", async function () {
+        const baseUrl = window.location.href.split("?")[0];
+        const shareText = "Here is the vibe read I got from Message Intent Lab:";
+        try {
+          if (navigator.share) {
+            await navigator.share({
+              title: "Message Intent Lab",
+              text: shareText,
+              url: baseUrl
             });
-            if (!response.ok) {
-              throw new Error("Checkout failed");
-            }
-            const data = await response.json();
-            if (data.url) {
-              window.location.href = data.url;
-            } else {
-              throw new Error("Missing checkout URL");
-            }
-          } catch (e) {
-            console.error("Checkout error:", e);
-            alert("Checkout could not start. Please try again in a moment.");
-            btn.classList.remove("loading");
-            btn.textContent = originalLabel;
+          } else if (navigator.clipboard) {
+            await navigator.clipboard.writeText(baseUrl);
+            alert("Link copied. Paste it in your group chat.");
+          } else {
+            alert("Sharing is not supported in this browser. You can still screenshot this.");
           }
-        });
+        } catch (e) {
+          console.error("Share failed:", e);
+        }
       });
     }
   });
@@ -668,162 +506,14 @@ Guidelines:
 """
 
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    try:
-        with get_db_connection() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
-                    free_uses_today INTEGER NOT NULL DEFAULT 0,
-                    free_uses_date TEXT,
-                    total_decodes INTEGER NOT NULL DEFAULT 0,
-                    last_decode_at TEXT,
-                    is_paid INTEGER NOT NULL DEFAULT 0,
-                    followup_credits INTEGER NOT NULL DEFAULT 0,
-                    paid_decode_credits INTEGER NOT NULL DEFAULT 0,
-                    lifetime_paid_decodes INTEGER NOT NULL DEFAULT 0
-                )
-                """
-            )
-            conn.commit()
-            migrate_db(conn)
-    except Exception:
-        logger.exception("Database init failed")
-
-
-def migrate_db(conn):
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
-    additions = []
-    if "paid_decode_credits" not in columns:
-        additions.append("ALTER TABLE users ADD COLUMN paid_decode_credits INTEGER NOT NULL DEFAULT 0")
-    if "lifetime_paid_decodes" not in columns:
-        additions.append("ALTER TABLE users ADD COLUMN lifetime_paid_decodes INTEGER NOT NULL DEFAULT 0")
-    for statement in additions:
-        try:
-            conn.execute(statement)
-        except Exception:
-            logger.exception("Database migration failed")
-    if additions:
-        conn.commit()
-
-
-def get_or_create_user_id(req):
-    cookie_value = req.cookies.get(COOKIE_NAME)
-    if cookie_value:
-        return cookie_value, False
-    return str(uuid.uuid4()), True
-
-
-def load_or_create_user(user_id):
-    try:
-        with get_db_connection() as conn:
-            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-            if row:
-                return row
-            created_at = dt.datetime.now(dt.timezone.utc).isoformat()
-            conn.execute(
-                """
-                INSERT INTO users (
-                    id, created_at, free_uses_today, free_uses_date,
-                    total_decodes, last_decode_at, is_paid, followup_credits,
-                    paid_decode_credits, lifetime_paid_decodes
-                )
-                VALUES (?, ?, 0, ?, 0, NULL, 0, 0, 0, 0)
-                """,
-                (user_id, created_at, created_at[:10]),
-            )
-            conn.commit()
-            return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    except Exception:
-        logger.exception("Database load/create failed")
-        return None
-
-
-def reset_daily_counter_if_needed(user_row):
-    if not user_row:
-        return False
-    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
-    if user_row["free_uses_date"] == today:
-        return False
-    try:
-        with get_db_connection() as conn:
-            conn.execute(
-                "UPDATE users SET free_uses_today = 0, free_uses_date = ? WHERE id = ?",
-                (today, user_row["id"]),
-            )
-            conn.commit()
-        return True
-    except Exception:
-        logger.exception("Failed to reset daily counter")
-        return False
-
-
-def increment_usage(user_row):
-    if not user_row:
-        return False
-    now = dt.datetime.now(dt.timezone.utc).isoformat()
-    today = now[:10]
-    try:
-        with get_db_connection() as conn:
-            conn.execute(
-                """
-                UPDATE users
-                SET free_uses_today = free_uses_today + ?,
-                    free_uses_date = ?,
-                    total_decodes = total_decodes + 1,
-                    last_decode_at = ?
-                WHERE id = ?
-                """,
-                (1, today, now, user_row["id"]),
-            )
-            conn.commit()
-        return True
-    except Exception:
-        logger.exception("Failed to increment usage")
-        return False
-
-
-def increment_usage_paid(user_row):
-    if not user_row:
-        return False
-    now = dt.datetime.now(dt.timezone.utc).isoformat()
-    today = now[:10]
-    try:
-        with get_db_connection() as conn:
-            conn.execute(
-                """
-                UPDATE users
-                SET paid_decode_credits = paid_decode_credits - 1,
-                    lifetime_paid_decodes = lifetime_paid_decodes + 1,
-                    free_uses_date = ?,
-                    total_decodes = total_decodes + 1,
-                    last_decode_at = ?
-                WHERE id = ? AND paid_decode_credits > 0
-                """,
-                (today, now, user_row["id"]),
-            )
-            conn.commit()
-        return True
-    except Exception:
-        logger.exception("Failed to decrement paid credits")
-        return False
-
-
-def stripe_enabled():
-    return bool(
-        STRIPE_SECRET_KEY
-        and STRIPE_WEBHOOK_SECRET
-        and STRIPE_PRICE_DECODE_10
-        and STRIPE_PRICE_DECODE_25
-        and STRIPE_PRICE_DECODE_50
+def log_submission(has_images, has_text, context_len):
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+    logger.info(
+        "[SUBMISSION] time=%s has_images=%s has_text=%s context_len=%s",
+        timestamp,
+        has_images,
+        has_text,
+        context_len,
     )
 
 
@@ -892,195 +582,23 @@ def build_analysis_input(context, conversation_text):
     )
 
 
-@app.route("/_admin/usage")
-def admin_usage():
-    if not ADMIN_TOKEN:
-        return ("Not Found", 404)
-
-    token = request.args.get("token", "")
-    if token != ADMIN_TOKEN:
-        return ("Forbidden", 403)
-
-    try:
-        with get_db_connection() as conn:
-            totals = conn.execute(
-                """
-                SELECT
-                    COUNT(*) AS users,
-                    COALESCE(SUM(total_decodes), 0) AS total_decodes,
-                    COALESCE(SUM(free_uses_today), 0) AS free_uses_today
-                FROM users
-                """
-            ).fetchone()
-
-        return jsonify(
-            users=totals["users"],
-            total_decodes=totals["total_decodes"],
-            free_uses_today=totals["free_uses_today"],
-        )
-    except Exception:
-        logger.exception("Admin usage lookup failed")
-        return ("Server error", 500)
-
-
-@app.route("/create-checkout-session/decode-pack", methods=["POST"])
-def create_checkout_session():
-    if not stripe_enabled():
-        return jsonify(error="Stripe is not configured"), 400
-
-    user_id, needs_cookie = get_or_create_user_id(request)
-    user_row = load_or_create_user(user_id)
-    if not user_row:
-        return jsonify(error="User unavailable"), 500
-    payload = request.get_json(silent=True) or {}
-    pack = str(payload.get("pack", "")).strip()
-    price_map = {
-        "10": STRIPE_PRICE_DECODE_10,
-        "25": STRIPE_PRICE_DECODE_25,
-        "50": STRIPE_PRICE_DECODE_50,
-    }
-    price_id = price_map.get(pack)
-    if not price_id:
-        return jsonify(error="Invalid pack"), 400
-
-    base_url = request.url_root.rstrip("/")
-    try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[{"price": price_id, "quantity": 1}],
-            client_reference_id=user_id,
-            metadata={"mil_uid": user_id, "pack_size": pack},
-            success_url=f"{base_url}/?checkout=success",
-            cancel_url=f"{base_url}/?checkout=cancel",
-        )
-        response = make_response(jsonify(url=session.url))
-        if needs_cookie:
-            response.set_cookie(
-                COOKIE_NAME,
-                user_id,
-                max_age=COOKIE_MAX_AGE,
-                httponly=True,
-                secure=True,
-                samesite="Lax",
-            )
-        return response
-    except Exception:
-        logger.exception("Stripe checkout session creation failed")
-        return jsonify(error="Stripe error"), 500
-
-
-@app.route("/stripe-webhook", methods=["POST"])
-def stripe_webhook():
-    if not STRIPE_WEBHOOK_SECRET:
-        return ("Webhook not configured", 400)
-
-    payload = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature", "")
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except Exception:
-        logger.exception("Stripe webhook signature verification failed")
-        return ("Invalid signature", 400)
-
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        metadata = session.get("metadata", {}) or {}
-        user_id = metadata.get("mil_uid")
-        pack_size = metadata.get("pack_size")
-        try:
-            credits = int(pack_size)
-        except (TypeError, ValueError):
-            credits = 0
-
-        if user_id and credits > 0:
-            try:
-                with get_db_connection() as conn:
-                    conn.execute(
-                        """
-                        UPDATE users
-                        SET paid_decode_credits = paid_decode_credits + ?
-                        WHERE id = ?
-                        """,
-                        (credits, user_id),
-                    )
-                    conn.commit()
-                    row = conn.execute(
-                        "SELECT paid_decode_credits FROM users WHERE id = ?", (user_id,)
-                    ).fetchone()
-                logger.info(
-                    "[PAYMENT] user=%s pack=%s credits_now=%s",
-                    user_id,
-                    credits,
-                    row["paid_decode_credits"] if row else "unknown",
-                )
-            except Exception:
-                logger.exception("Failed to apply Stripe credits")
-
-    return ("OK", 200)
-
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
     error = None
     context = ""
     thread = ""
-    limit_blocked = False
-    limit_reached = False
-    banner = None
-    used_paid_credit = False
-    user_id, needs_cookie = get_or_create_user_id(request)
-
-    if request.method == "GET":
-        checkout_state = request.args.get("checkout")
-        if checkout_state in {"success", "cancel"}:
-            user_row = load_or_create_user(user_id)
-            if checkout_state == "success":
-                if user_row:
-                    banner = f"Unlocked. You now have {user_row['paid_decode_credits']} decodes."
-                else:
-                    banner = "Unlocked. Your decodes will appear shortly."
-            elif checkout_state == "cancel":
-                banner = "Checkout canceled."
 
     if request.method == "POST":
         context = request.form.get("context", "").strip()
         thread = request.form.get("thread", "").strip()
         images = request.files.getlist("images") if "images" in request.files else []
 
-        user_row = load_or_create_user(user_id)
-        if not user_row:
-            error = "We hit a server issue. Please try again in a moment."
-            limit_blocked = True
-        else:
-            reset_daily_counter_if_needed(user_row)
-            user_row = load_or_create_user(user_id)
+        log_submission(bool(images), bool(thread), len(context))
 
-            if not user_row:
-                error = "We hit a server issue. Please try again in a moment."
-                limit_blocked = True
-            else:
-                if user_row["paid_decode_credits"] > 0:
-                    used_paid_credit = True
-                elif user_row["free_uses_today"] >= 2:
-                    limit_blocked = True
-                    limit_reached = True
-
-        timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
-        logger.info(
-            "[SUBMISSION] time=%s user_id=%s has_images=%s has_text=%s context_len=%s blocked=%s paid_path=%s",
-            timestamp,
-            user_id,
-            bool(images),
-            bool(thread),
-            len(context),
-            limit_blocked,
-            used_paid_credit,
-        )
-
-        if not error and not limit_reached and (not API_KEY or client is None):
+        if not API_KEY or client is None:
             error = "Server is missing the OpenAI API key. This is a setup issue, not your fault."
-        elif not error and not limit_reached:
+        else:
             ocr_text = extract_text_from_images(images) if images else ""
 
             if images and not ocr_text and not thread:
@@ -1104,48 +622,23 @@ def index():
                         )
                         raw_html = completion.choices[0].message.content
                         result = strip_disallowed_html(raw_html)
-                        if used_paid_credit:
-                            increment_usage_paid(user_row)
-                        else:
-                            increment_usage(user_row)
                     except Exception:
                         logger.exception("OpenAI analysis failed")
                         error = "Something went wrong while analyzing the conversation."
 
-    response = make_response(
-        render_template_string(
+    return render_template_string(
         HTML_TEMPLATE,
         app_name=APP_NAME,
         tagline=TAGLINE,
         result=result,
         error=error,
-        limit_reached=limit_reached,
-        stripe_enabled=stripe_enabled(),
-        banner=banner,
         context=context,
         thread=thread,
-        )
     )
-    if needs_cookie:
-        response.set_cookie(
-            COOKIE_NAME,
-            user_id,
-            max_age=COOKIE_MAX_AGE,
-            httponly=True,
-            secure=True,
-            samesite="Lax",
-        )
-    return response
 
 
 # Premium features will be added here later.
-# Limit panel is rendered in the main template when limit_reached is True,
-# which is set in the index route when the daily free limit is hit.
 
 if __name__ == "__main__":
-    init_db()
     port = int(os.getenv("PORT", "8000"))
     app.run(host="0.0.0.0", port=port)
-
-
-init_db()
